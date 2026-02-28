@@ -22,32 +22,12 @@
 .navbar-brand {
   display: inline-flex;
   align-items: center;
-  gap: 0.65rem;
   letter-spacing: 0.2px;
 }
 
-.brand-mark {
-  font-size: 1.8rem;
-  color: #1769ff;
-  line-height: 1;
-}
-
-.brand-text-wrap {
-  display: inline-flex;
-  flex-direction: column;
-  line-height: 1.05;
-}
-
-.brand-top {
-  font-size: 1.55rem;
-  font-weight: 800;
-  color: #0f172a;
-}
-
-.brand-bottom {
-  font-size: 1.3rem;
-  font-weight: 900;
-  color: #1769ff;
+.brand-logo {
+  width: clamp(180px, 19vw, 250px);
+  height: auto;
 }
 
 .navbar .nav-link {
@@ -89,11 +69,7 @@
     flex-wrap: wrap;
   }
 
-  .brand-top {
-    font-size: 1.2rem;
-  }
-
-  .brand-bottom {
-    font-size: 1rem;
+  .brand-logo {
+    width: 190px;
   }
 }
