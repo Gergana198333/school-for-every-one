@@ -1,7 +1,99 @@
+.top-links-bar {
+  background: #1140d6;
+}
+
+.top-link {
+  color: #fff;
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.top-link:hover {
+  opacity: 0.9;
+}
+
+.main-nav {
+  border-bottom: 1px solid #e9edf4;
+}
+
 .navbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
   letter-spacing: 0.2px;
 }
 
+.brand-mark {
+  font-size: 1.8rem;
+  color: #1769ff;
+  line-height: 1;
+}
+
+.brand-text-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  line-height: 1.05;
+}
+
+.brand-top {
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.brand-bottom {
+  font-size: 1.3rem;
+  font-weight: 900;
+  color: #1769ff;
+}
+
+.navbar .nav-link {
+  color: #1f2937;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.95rem;
+}
+
 .navbar .nav-link.active {
-  font-weight: 600;
+  color: #1140d6;
+}
+
+.apply-btn {
+  background: #f04b86;
+  color: #fff;
+  border-radius: 999px;
+  font-weight: 800;
+  padding-inline: 1.45rem;
+  text-transform: uppercase;
+  font-size: 0.86rem;
+  letter-spacing: 0.05em;
+}
+
+.apply-btn:hover {
+  background: #df3f79;
+  color: #fff;
+}
+
+.admission-banner {
+  background: #9af06a;
+  color: #13226b;
+}
+
+@media (max-width: 768px) {
+  .top-links-bar .container {
+    justify-content: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .brand-top {
+    font-size: 1.2rem;
+  }
+
+  .brand-bottom {
+    font-size: 1rem;
+  }
 }

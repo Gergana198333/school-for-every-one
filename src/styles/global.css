@@ -1,5 +1,7 @@
 body {
   background-color: #f8f9fa;
+  color: #0f172a;
+  font-family: Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 .page-hero {
@@ -9,5 +11,5 @@ body {
 }
 
 .page-section {
-  margin-bottom: 2rem;
+  margin-bottom: 3rem;
 }

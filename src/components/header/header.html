@@ -1,7 +1,21 @@
 <header>
-  <nav class="navbar navbar-expand-lg bg-white border-bottom">
+  <div class="top-links-bar py-2">
+    <div class="container d-flex justify-content-end gap-4">
+      <a class="top-link" href="/about">🎓 Алумни</a>
+      <a class="top-link" href="/classes">👩‍🏫 Учители</a>
+      <a class="top-link" href="/contacts">👨‍👩‍👧 Родители</a>
+    </div>
+  </div>
+
+  <nav class="navbar navbar-expand-xl bg-white main-nav py-3">
     <div class="container">
-      <a class="navbar-brand fw-semibold" href="/">School Resources</a>
+      <a class="navbar-brand fw-semibold" href="/">
+        <span class="brand-mark">◈</span>
+        <span class="brand-text-wrap">
+          <span class="brand-top">School Resources</span>
+          <span class="brand-bottom">БЪДИТЕЛ</span>
+        </span>
+      </a>
       <button
         class="navbar-toggler"
         type="button"
@@ -15,14 +29,23 @@
       </button>
 
       <div class="collapse navbar-collapse" id="mainNav">
-        <ul class="navbar-nav ms-auto gap-lg-2">
-          <li class="nav-item"><a class="nav-link" href="/">Начало</a></li>
+        <ul class="navbar-nav ms-auto gap-xl-2 align-items-xl-center">
+          <li class="nav-item"><a class="nav-link" href="/about">За нас</a></li>
+          <li class="nav-item"><a class="nav-link" href="/">Обучение</a></li>
           <li class="nav-item"><a class="nav-link" href="/classes">Класове</a></li>
-          <li class="nav-item"><a class="nav-link" href="/about">За училището</a></li>
-          <li class="nav-item"><a class="nav-link" href="/contacts">Контакти</a></li>
           <li class="nav-item"><a class="nav-link" href="/news">Новини</a></li>
+          <li class="nav-item"><a class="nav-link" href="/contacts">Контакти</a></li>
+          <li class="nav-item ms-xl-2 mt-2 mt-xl-0">
+            <a class="btn apply-btn" href="/contacts">Кандидатствай</a>
+          </li>
         </ul>
       </div>
     </div>
   </nav>
+
+  <div class="admission-banner py-2">
+    <div class="container text-center fw-semibold">
+      Приемът за новата учебна година е отворен. Направи първата крачка – подай своята кандидатура.
+    </div>
+  </div>
 </header>
