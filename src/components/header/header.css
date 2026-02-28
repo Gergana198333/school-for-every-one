@@ -49,6 +49,38 @@
   color: #1140d6;
 }
 
+.header-search {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.header-search-input {
+  min-width: 180px;
+  border-radius: 999px;
+  border-color: #d7deea;
+  font-size: 0.9rem;
+}
+
+.header-search-input:focus {
+  box-shadow: 0 0 0 0.2rem rgba(17, 64, 214, 0.15);
+  border-color: #1140d6;
+}
+
+.header-search-btn {
+  border-radius: 999px;
+  background: #1140d6;
+  color: #fff;
+  font-size: 0.86rem;
+  font-weight: 700;
+  padding-inline: 0.9rem;
+}
+
+.header-search-btn:hover {
+  background: #0f37bb;
+  color: #fff;
+}
+
 .apply-btn {
   background: #f04b86;
   color: #fff;
@@ -86,5 +118,13 @@
     max-width: 220px;
     line-height: 1.2;
     font-size: 0.95rem;
+  }
+
+  .header-search {
+    width: 100%;
+  }
+
+  .header-search-input {
+    width: 100%;
   }
 }
