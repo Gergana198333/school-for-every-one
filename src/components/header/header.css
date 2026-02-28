@@ -22,12 +22,20 @@
 .navbar-brand {
   display: inline-flex;
   align-items: center;
+  gap: 0.75rem;
   letter-spacing: 0.2px;
 }
 
 .brand-logo {
-  width: clamp(180px, 19vw, 250px);
+  width: clamp(220px, 24vw, 320px);
   height: auto;
+}
+
+.brand-slogan {
+  color: #0f1c3f;
+  font-size: clamp(0.95rem, 1.35vw, 1.2rem);
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .navbar .nav-link {
@@ -70,6 +78,13 @@
   }
 
   .brand-logo {
-    width: 190px;
+    width: 230px;
+  }
+
+  .brand-slogan {
+    white-space: normal;
+    max-width: 220px;
+    line-height: 1.2;
+    font-size: 0.95rem;
   }
 }
