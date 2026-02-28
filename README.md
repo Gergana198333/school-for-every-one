@@ -1,4 +1,4 @@
-# School Resources (Vite Multi-Page App)
+# Уча България (Vite Multi-Page App)
 
 ## Стартиране
 
