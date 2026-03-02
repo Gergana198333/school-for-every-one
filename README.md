@@ -8,19 +8,46 @@
    npm install
    ```
 
-2. Стартиране на dev сървър:
+2. Supabase настройки:
+
+  - Копирай `.env.example` като `.env`
+  - Попълни `VITE_SUPABASE_URL` и `VITE_SUPABASE_ANON_KEY`
+  - По избор: смени `VITE_SUPABASE_HOMEWORK_BUCKET` (по подразбиране `homework-files`)
+
+3. Стартиране на dev сървър:
 
    ```bash
    npm run dev
    ```
 
-3. Отвори приложението на:
+4. Отвори приложението на:
 
    - `http://localhost:5000/`
    - `http://localhost:5000/classes`
    - `http://localhost:5000/about`
    - `http://localhost:5000/contacts`
    - `http://localhost:5000/news`
+
+## Supabase таблици
+
+- `classes` (използва се в страница „Класове")
+- `subjects`
+- `lessons` (за страница „Класове"), примерни колони:
+  - `title` или `lesson` или `next_lesson`
+  - `teacher` или `teacher_name`
+  - `class_id` → foreign key към `classes.id`
+  - `subject_id` → foreign key към `subjects.id`
+- `contact_messages` с колони:
+  - `student_name` (text)
+  - `student_class` (text)
+  - `message` (text)
+  - `homework_file_name` (text, nullable)
+  - `homework_file_url` (text, nullable)
+
+## Supabase Storage
+
+- Създай bucket `homework-files` (или името от `VITE_SUPABASE_HOMEWORK_BUCKET`)
+- Разреши `insert` за качване на файлове за anon/authenticated role според нужните policies
 
 ## Структура на приложението
 

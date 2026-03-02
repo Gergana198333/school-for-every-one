@@ -81,16 +81,3 @@ async function bootstrapApp() {
 bootstrapApp().catch((error) => {
   console.error(error);
 });
-import { supabase } from "./supabaseClient";
-
-async function testConnection() {
-  const { data, error } = await supabase
-    .from("classes")
-    .select("*")
-    .order("id");
-
-  console.log("CLASSES:", data);
-  if (error) console.error("ERROR:", error);
-}
-
-testConnection();
