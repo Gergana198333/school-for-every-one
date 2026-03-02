@@ -1,4 +1,22 @@
-.table {
-  border-radius: 0.5rem;
-  overflow: hidden;
+.classes-filter-wrap {
+  max-width: 280px;
+}
+
+.grade-filter-select {
+  border-radius: 0.7rem;
+  border-color: #d5deef;
+}
+
+.grade-filter-select:focus {
+  border-color: #1140d6;
+  box-shadow: 0 0 0 0.2rem rgba(17, 64, 214, 0.14);
+}
+
+.class-card {
+  border-radius: 0.85rem;
+  border: 1px solid rgba(15, 28, 63, 0.08);
+}
+
+.class-card h2 {
+  color: #1140d6;
 }
