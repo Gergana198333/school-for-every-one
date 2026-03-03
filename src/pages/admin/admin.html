@@ -51,12 +51,31 @@
             <select id="lessonClass" name="lessonClass" class="form-select" required></select>
           </div>
           <div class="mb-3">
-            <label for="lessonSubject" class="form-label">Предмет</label>
-            <select id="lessonSubject" name="lessonSubject" class="form-select" required></select>
+            <label for="lessonSubjectInput" class="form-label">Предмет</label>
+            <input
+              id="lessonSubjectInput"
+              name="lessonSubjectInput"
+              class="form-control"
+              list="lessonSubjectList"
+              placeholder="Напиши предмет (напр. Математика)"
+              required
+            />
+            <datalist id="lessonSubjectList"></datalist>
           </div>
           <div class="mb-3">
             <label for="lessonTeacher" class="form-label">Учител</label>
             <input id="lessonTeacher" name="lessonTeacher" class="form-control" required />
+          </div>
+          <div class="mb-3">
+            <label for="lessonMaterial" class="form-label">Файл към урок (по избор)</label>
+            <input
+              id="lessonMaterial"
+              name="lessonMaterial"
+              type="file"
+              class="form-control"
+              accept=".pdf,.docx,.mp4,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,video/mp4,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            />
+            <div class="form-text">Поддържани формати: PDF, DOCX, MP4, PPTX.</div>
           </div>
           <button type="submit" class="btn btn-primary">Запази урок</button>
           <p class="mt-3 mb-0 d-none" id="admin-lesson-message"></p>

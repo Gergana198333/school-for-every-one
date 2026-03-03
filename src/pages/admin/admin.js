@@ -1,5 +1,14 @@
 import { supabase } from '../../supabaseClient';
 
+const LESSON_MATERIAL_BUCKET = import.meta.env.VITE_SUPABASE_LESSON_BUCKET || 'lesson-materials';
+const ALLOWED_LESSON_MATERIAL_TYPES = new Set([
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'video/mp4',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+]);
+const ALLOWED_LESSON_MATERIAL_EXTENSIONS = new Set(['pdf', 'docx', 'mp4', 'pptx']);
+
 const ADMIN_EMAILS = String(import.meta.env.VITE_ADMIN_EMAILS ?? '')
   .split(',')
   .map((email) => email.trim().toLowerCase())
@@ -62,7 +71,8 @@ function renderStats(statsRoot, stats) {
 
 async function loadSelectOptions(root) {
   const classSelect = root.querySelector('#lessonClass');
-  const subjectSelect = root.querySelector('#lessonSubject');
+  const subjectInput = root.querySelector('#lessonSubjectInput');
+  const subjectList = root.querySelector('#lessonSubjectList');
   const studentClassSelect = root.querySelector('#adminStudentClass');
   const parentStudentSelect = root.querySelector('#parentLinkStudent');
 
@@ -88,10 +98,12 @@ async function loadSelectOptions(root) {
       .join('');
   }
 
-  if (!subjectsError && Array.isArray(subjectsData) && subjectSelect) {
-    subjectSelect.innerHTML = subjectsData
-      .map((item) => `<option value="${item.id}">${item.name}</option>`)
-      .join('');
+  if (!subjectsError && Array.isArray(subjectsData) && subjectList) {
+    subjectList.innerHTML = subjectsData.map((item) => `<option value="${item.name}"></option>`).join('');
+
+    if (subjectInput && !subjectInput.value && subjectsData.length > 0) {
+      subjectInput.value = subjectsData[0].name;
+    }
   }
 
   if (!studentsError && Array.isArray(studentsData) && parentStudentSelect) {
@@ -250,24 +262,122 @@ async function refreshDashboard(root) {
   await Promise.all([loadStats(root), loadProgressTable(root), loadSubmissionsTable(root), loadRecentStudentCodes(root)]);
 }
 
+async function getOrCreateSubjectId(subjectName) {
+  const normalizedName = String(subjectName ?? '').trim();
+  if (!normalizedName) {
+    throw new Error('Попълнете предмет.');
+  }
+
+  const { data: existing, error: existingError } = await supabase
+    .from('subjects')
+    .select('id, name')
+    .eq('name', normalizedName)
+    .maybeSingle();
+
+  if (existingError) {
+    throw existingError;
+  }
+
+  if (existing?.id) {
+    return existing.id;
+  }
+
+  const { data: inserted, error: insertError } = await supabase
+    .from('subjects')
+    .insert([{ name: normalizedName }])
+    .select('id')
+    .single();
+
+  if (insertError || !inserted?.id) {
+    throw insertError ?? new Error('Неуспешно създаване на предмет.');
+  }
+
+  return inserted.id;
+}
+
 async function handleLessonCreate(root, form) {
   const message = root.querySelector('#admin-lesson-message');
   const formData = new FormData(form);
+  const materialFile = formData.get('lessonMaterial');
+  const subjectName = String(formData.get('lessonSubjectInput') ?? '').trim();
+
+  let subjectId;
+  try {
+    subjectId = await getOrCreateSubjectId(subjectName);
+  } catch (subjectError) {
+    setMessage(message, `Грешка при предмет: ${subjectError.message}`, 'error');
+    return;
+  }
 
   const payload = {
     title: String(formData.get('lessonTitle') ?? '').trim(),
     description: String(formData.get('lessonDescription') ?? '').trim(),
     class_id: Number(formData.get('lessonClass')),
-    subject_id: Number(formData.get('lessonSubject')),
+    subject_id: subjectId,
     teacher_name: String(formData.get('lessonTeacher') ?? '').trim(),
     published_at: new Date().toISOString()
   };
 
-  const { error } = await supabase.from('lessons').insert([payload]);
+  const hasMaterial = materialFile instanceof File && materialFile.name;
 
-  if (error) {
+  if (hasMaterial) {
+    const fileType = String(materialFile.type ?? '').trim();
+    const extension = materialFile.name.includes('.') ? materialFile.name.split('.').pop()?.toLowerCase() : '';
+    const typeAllowed = fileType ? ALLOWED_LESSON_MATERIAL_TYPES.has(fileType) : false;
+    const extensionAllowed = extension ? ALLOWED_LESSON_MATERIAL_EXTENSIONS.has(extension) : false;
+
+    if (!typeAllowed && !extensionAllowed) {
+      setMessage(message, 'Позволени файлове: PDF, DOCX, MP4, PPTX.', 'error');
+      return;
+    }
+  }
+
+  const { data: lessonRow, error } = await supabase.from('lessons').insert([payload]).select('id').single();
+
+  if (error || !lessonRow?.id) {
     setMessage(message, `Грешка при запис на урок: ${error.message}`, 'error');
     return;
+  }
+
+  if (hasMaterial) {
+    const extension = materialFile.name.includes('.') ? materialFile.name.split('.').pop()?.toLowerCase() : 'bin';
+    const safeExtension = extension && /^[a-z0-9]+$/.test(extension) ? extension : 'bin';
+    const storagePath = `lessons/${lessonRow.id}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${safeExtension}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(LESSON_MATERIAL_BUCKET)
+      .upload(storagePath, materialFile, { upsert: false });
+
+    if (uploadError) {
+      setMessage(
+        message,
+        `Урокът е записан, но файлът не е качен: ${uploadError.message}. Проверете bucket ${LESSON_MATERIAL_BUCKET}.`,
+        'error'
+      );
+      await refreshDashboard(root);
+      return;
+    }
+
+    const { data: publicUrlData } = supabase.storage.from(LESSON_MATERIAL_BUCKET).getPublicUrl(storagePath);
+
+    const materialPayload = {
+      lesson_id: lessonRow.id,
+      file_name: materialFile.name,
+      file_path: storagePath,
+      file_url: publicUrlData?.publicUrl ?? null,
+      file_type: materialFile.type
+    };
+
+    const { error: materialError } = await supabase.from('lesson_materials').insert([materialPayload]);
+    if (materialError) {
+      setMessage(
+        message,
+        `Урокът е записан, но линкът към файла не е записан: ${materialError.message}.`,
+        'error'
+      );
+      await refreshDashboard(root);
+      return;
+    }
   }
 
   form.reset();

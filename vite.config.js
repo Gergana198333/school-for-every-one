@@ -3,12 +3,10 @@ import { resolve } from 'node:path';
 
 export default defineConfig({
   server: {
-    port: 5000,
-    strictPort: true
+    port: 5000
   },
   preview: {
-    port: 5000,
-    strictPort: true
+    port: 5000
   },
   build: {
     rollupOptions: {
