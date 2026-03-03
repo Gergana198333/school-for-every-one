@@ -25,6 +25,10 @@ function getSearchTarget(query) {
     return '/admin/';
   }
 
+  if (/вход|логин|login|sign/.test(normalized)) {
+    return '/login/';
+  }
+
   if (/училищ|за нас|мисия|about/.test(normalized)) {
     return '/about/';
   }

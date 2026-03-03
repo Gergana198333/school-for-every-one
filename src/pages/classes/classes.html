@@ -124,3 +124,39 @@
     </div>
   </div>
 </section>
+
+<section class="container page-section" id="class-room-section">
+  <div class="bg-white p-4 rounded-3 shadow-sm">
+    <h2 class="h4 mb-3">Класна стая</h2>
+    <p class="text-body-secondary mb-3" id="class-room-note">
+      Влезте в профила си, за да видите задачи и разговори за вашия клас.
+    </p>
+
+    <div class="row g-4 d-none" id="class-room-content">
+      <div class="col-lg-6">
+        <h3 class="h6 mb-3">Задачи от учителя</h3>
+        <ul class="list-group" id="class-room-lessons"></ul>
+      </div>
+
+      <div class="col-lg-6">
+        <h3 class="h6 mb-3">Предадени домашни</h3>
+        <ul class="list-group" id="class-room-submissions"></ul>
+      </div>
+
+      <div class="col-12">
+        <h3 class="h6 mb-3">Разговори в класа</h3>
+        <div class="class-room-messages mb-3" id="class-room-messages"></div>
+        <form id="class-room-message-form" class="d-flex gap-2">
+          <input
+            id="class-room-message-input"
+            class="form-control"
+            placeholder="Напиши съобщение до класа..."
+            maxlength="500"
+            required
+          />
+          <button type="submit" class="btn btn-primary">Изпрати</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>

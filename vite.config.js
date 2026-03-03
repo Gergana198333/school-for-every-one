@@ -18,7 +18,8 @@ export default defineConfig({
         about: resolve(__dirname, 'about/index.html'),
         contacts: resolve(__dirname, 'contacts/index.html'),
         news: resolve(__dirname, 'news/index.html'),
-        admin: resolve(__dirname, 'admin/index.html')
+        admin: resolve(__dirname, 'admin/index.html'),
+        login: resolve(__dirname, 'login/index.html')
       }
     }
   }

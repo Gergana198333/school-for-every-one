@@ -29,6 +29,7 @@
    - `http://localhost:5000/contacts`
    - `http://localhost:5000/news`
   - `http://localhost:5000/admin/`
+  - `http://localhost:5000/login/`
 
 ## Админ панел
 
@@ -43,6 +44,16 @@
 - Трябва да имаш създаден потребител в Supabase Auth (Email/Password), за да влезеш в `/admin/`.
 - Ако `VITE_ADMIN_EMAILS` е зададен, само имейлите в този allowlist имат достъп до dashboard-а.
 - Ако `VITE_ADMIN_EMAILS` липсва или е празен, admin dashboard е блокиран за всички (strict mode).
+
+## Вход и регистрация
+
+- Страница: `/login/`
+- На една и съща форма има 2 бутона:
+  - `Вход` (`signInWithPassword`)
+  - `Регистрация` (`signUp`)
+- При регистрация се създава профил в `user_profiles` с роля и клас.
+- Посетителите могат да разглеждат публичните страници без вход.
+- Класните стаи в `/classes/` са достъпни само за логнати потребители с роля `student|teacher|parent` и зададен `class_id`.
 
 ## Supabase таблици
 
@@ -69,9 +80,40 @@
 
 - Готов SQL файл: `supabase/migrations/001_initial_school_schema.sql`
 - Допълнителен SQL файл за новини: `supabase/migrations/002_news_posts_table.sql`
+- Допълнителен SQL файл за профили и разговори в клас: `supabase/migrations/003_user_profiles_and_class_room_messages.sql`
+- Допълнителен SQL файл за RLS политики: `supabase/migrations/004_rls_user_profiles_and_class_room_messages.sql`
+- Допълнителен SQL файл за строги родителски политики: `supabase/migrations/005_strict_parent_policies.sql`
+- Допълнителен SQL файл за строги учителски политики: `supabase/migrations/006_strict_teacher_policies.sql`
+- Допълнителен SQL файл за admin bypass при strict RLS: `supabase/migrations/007_admin_bypass_policies.sql`
+- Допълнителен SQL файл за регистрация с кодове: `supabase/migrations/008_enrollment_codes.sql`
+- Примерни seed данни за 5 клас (ученици/родители/кодове): `supabase/migrations/009_seed_sample_students_parents.sql`
+- Допълнителен SQL файл за свързване на родители по имейл: `supabase/migrations/010_link_parents_by_email.sql`
+- Допълнителен SQL файл за admin policy върху кодовете: `supabase/migrations/011_admin_enrollment_codes_policy.sql`
 - В Supabase Dashboard отвори **SQL Editor**
 - Постави съдържанието на файла и изпълни заявката
-- Това ще създаде базовите таблици и релации за `classes`, `subjects`, `students`, `parent_students`, `lessons`, `lesson_progress`, `submissions`, `contact_messages`, `news_posts`
+- Това ще създаде базовите таблици и релации за `classes`, `subjects`, `students`, `parent_students`, `lessons`, `lesson_progress`, `submissions`, `contact_messages`, `news_posts`, `user_profiles`, `class_room_messages` и по-строги RLS политики за класни стаи, родители, учители и admin bypass.
+
+Препоръчан ред за изпълнение на миграциите: `001` → `002` → `003` → `004` → `005` → `006` → `007` → `008` → `009` (по избор, за примерни данни) → `010` (по избор, за имейл sync) → `011`.
+
+## Admin bypass (DB)
+
+- `007` създава таблица `admin_emails` и функция `is_admin_email()`.
+- Добавя RLS policy bypass за админ имейлите върху таблиците със strict RLS.
+- Поддържай `admin_emails` в sync с `VITE_ADMIN_EMAILS`, за да съвпадат frontend и database проверките.
+
+## Регистрация с училищни кодове
+
+- Ученици и родители се регистрират с код от училището (напр. `5U00234` за ученик, `5RU00234` за родител).
+- При регистрация кодът се валидира и маркира като използван в `enrollment_codes`.
+- За родители кодът свързва профила с конкретен ученик в `parent_students`.
+- За учители регистрацията остава с избор на клас (без код).
+
+## Свързване на родители по имейл
+
+- `010` добавя таблица `parent_email_student_links` и функция `sync_parent_links_from_emails()`.
+- Добавяш редове в `parent_email_student_links` с имейл на родителя и `student_id`.
+- Пускаш `select public.sync_parent_links_from_emails();`.
+- Функцията намира потребителя в `auth.users` по имейл, създава/обновява `user_profiles` с роля `parent` и добавя връзка в `parent_students`.
 
 ## Структура на приложението
 

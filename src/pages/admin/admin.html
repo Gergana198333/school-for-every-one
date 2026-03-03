@@ -84,6 +84,89 @@
 
     <div class="col-12">
       <article class="bg-white p-4 rounded-3 shadow-sm">
+        <h2 class="h5 mb-3">Добави ученик</h2>
+        <form id="admin-student-form" class="row g-3 align-items-end">
+          <div class="col-lg-4">
+            <label for="adminStudentName" class="form-label">Име на ученик</label>
+            <input id="adminStudentName" name="adminStudentName" class="form-control" required />
+          </div>
+          <div class="col-lg-3">
+            <label for="adminStudentClass" class="form-label">Клас</label>
+            <select id="adminStudentClass" name="adminStudentClass" class="form-select" required></select>
+          </div>
+          <div class="col-lg-3">
+            <label for="adminEnrollmentNumber" class="form-label">№ записване</label>
+            <input
+              id="adminEnrollmentNumber"
+              name="adminEnrollmentNumber"
+              class="form-control"
+              inputmode="numeric"
+              pattern="[0-9]{1,10}"
+              placeholder="234"
+              required
+            />
+          </div>
+          <div class="col-lg-2 d-grid">
+            <button type="submit" class="btn btn-primary">Запиши</button>
+          </div>
+        </form>
+        <p class="mt-3 mb-0 d-none" id="admin-student-message"></p>
+
+        <div class="table-responsive mt-4">
+          <table class="table align-middle" id="admin-student-codes-table">
+            <thead>
+              <tr>
+                <th>Ученик</th>
+                <th>Клас</th>
+                <th>Ученически код</th>
+                <th>Родителски код</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="4" class="text-body-secondary">Няма добавени ученици.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+
+    <div class="col-12">
+      <article class="bg-white p-4 rounded-3 shadow-sm">
+        <h2 class="h5 mb-3">Родители и ученици (имейл връзка)</h2>
+        <form id="admin-parent-link-form" class="row g-3 align-items-end">
+          <div class="col-lg-5">
+            <label for="parentLinkEmail" class="form-label">Имейл на родител</label>
+            <input
+              id="parentLinkEmail"
+              name="parentLinkEmail"
+              type="email"
+              class="form-control"
+              placeholder="parent@example.com"
+              required
+            />
+          </div>
+          <div class="col-lg-5">
+            <label for="parentLinkStudent" class="form-label">Ученик</label>
+            <select id="parentLinkStudent" name="parentLinkStudent" class="form-select" required></select>
+          </div>
+          <div class="col-lg-2 d-grid">
+            <button type="submit" class="btn btn-primary">Добави връзка</button>
+          </div>
+        </form>
+
+        <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+          <button id="admin-parent-sync-btn" class="btn btn-outline-primary" type="button">Синхронизирай родители</button>
+          <span class="text-body-secondary small">Изпълнява sync_parent_links_from_emails()</span>
+        </div>
+
+        <p class="mt-3 mb-0 d-none" id="admin-parent-link-message"></p>
+      </article>
+    </div>
+
+    <div class="col-12">
+      <article class="bg-white p-4 rounded-3 shadow-sm">
         <h2 class="h5 mb-3">Напредък на учениците</h2>
         <div class="table-responsive">
           <table class="table align-middle" id="admin-progress-table">

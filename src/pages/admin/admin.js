@@ -63,10 +63,17 @@ function renderStats(statsRoot, stats) {
 async function loadSelectOptions(root) {
   const classSelect = root.querySelector('#lessonClass');
   const subjectSelect = root.querySelector('#lessonSubject');
+  const studentClassSelect = root.querySelector('#adminStudentClass');
+  const parentStudentSelect = root.querySelector('#parentLinkStudent');
 
-  const [{ data: classesData, error: classesError }, { data: subjectsData, error: subjectsError }] = await Promise.all([
+  const [
+    { data: classesData, error: classesError },
+    { data: subjectsData, error: subjectsError },
+    { data: studentsData, error: studentsError }
+  ] = await Promise.all([
     supabase.from('classes').select('id, name').order('name', { ascending: true }),
-    supabase.from('subjects').select('id, name').order('name', { ascending: true })
+    supabase.from('subjects').select('id, name').order('name', { ascending: true }),
+    supabase.from('students').select('id, full_name, class_id').order('full_name', { ascending: true })
   ]);
 
   if (!classesError && Array.isArray(classesData) && classSelect) {
@@ -75,9 +82,26 @@ async function loadSelectOptions(root) {
       .join('');
   }
 
+  if (!classesError && Array.isArray(classesData) && studentClassSelect) {
+    studentClassSelect.innerHTML = classesData
+      .map((item) => `<option value="${item.id}">${item.name}</option>`)
+      .join('');
+  }
+
   if (!subjectsError && Array.isArray(subjectsData) && subjectSelect) {
     subjectSelect.innerHTML = subjectsData
       .map((item) => `<option value="${item.id}">${item.name}</option>`)
+      .join('');
+  }
+
+  if (!studentsError && Array.isArray(studentsData) && parentStudentSelect) {
+    const classNameById = new Map((classesData ?? []).map((item) => [item.id, item.name]));
+
+    parentStudentSelect.innerHTML = studentsData
+      .map((student) => {
+        const className = classNameById.get(student.class_id) ?? `Клас #${student.class_id ?? '-'}`;
+        return `<option value="${student.id}">${student.full_name} (${className})</option>`;
+      })
       .join('');
   }
 }
@@ -181,8 +205,49 @@ async function loadSubmissionsTable(root) {
     .join('');
 }
 
+async function loadRecentStudentCodes(root) {
+  const body = root.querySelector('#admin-student-codes-table tbody');
+  if (!body) {
+    return;
+  }
+
+  const [{ data: classesData }, { data: studentsData, error: studentsError }] = await Promise.all([
+    supabase.from('classes').select('id, name'),
+    supabase
+      .from('students')
+      .select('id, full_name, class_id, created_at, enrollment_codes(code, role, created_at)')
+      .order('created_at', { ascending: false })
+      .limit(20)
+  ]);
+
+  if (studentsError || !Array.isArray(studentsData) || studentsData.length === 0) {
+    body.innerHTML = '<tr><td colspan="4" class="text-body-secondary">Няма добавени ученици.</td></tr>';
+    return;
+  }
+
+  const classNameById = new Map((classesData ?? []).map((item) => [item.id, item.name]));
+
+  body.innerHTML = studentsData
+    .map((student) => {
+      const codes = Array.isArray(student.enrollment_codes) ? student.enrollment_codes : [];
+      const studentCode = codes.find((item) => item.role === 'student')?.code ?? '—';
+      const parentCode = codes.find((item) => item.role === 'parent')?.code ?? '—';
+      const className = classNameById.get(student.class_id) ?? `Клас #${student.class_id ?? '-'}`;
+
+      return `
+        <tr>
+          <td>${student.full_name ?? 'Няма данни'}</td>
+          <td>${className}</td>
+          <td><span class="badge text-bg-light border">${studentCode}</span></td>
+          <td><span class="badge text-bg-light border">${parentCode}</span></td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
 async function refreshDashboard(root) {
-  await Promise.all([loadStats(root), loadProgressTable(root), loadSubmissionsTable(root)]);
+  await Promise.all([loadStats(root), loadProgressTable(root), loadSubmissionsTable(root), loadRecentStudentCodes(root)]);
 }
 
 async function handleLessonCreate(root, form) {
@@ -233,6 +298,155 @@ async function handleNewsCreate(root, form) {
 
   form.reset();
   setMessage(message, 'Новината е публикувана успешно.', 'success');
+}
+
+function extractGradeFromClassName(className, classId) {
+  const fromName = String(className ?? '').match(/\d+/);
+  if (fromName?.[0]) {
+    return fromName[0];
+  }
+
+  return String(classId ?? '').trim();
+}
+
+function padEnrollmentNumber(value) {
+  const numeric = String(value ?? '').replace(/\D/g, '');
+  return numeric.padStart(5, '0');
+}
+
+async function handleStudentCreate(root, form) {
+  const message = root.querySelector('#admin-student-message');
+  const formData = new FormData(form);
+
+  const studentName = String(formData.get('adminStudentName') ?? '').trim();
+  const classId = Number(formData.get('adminStudentClass'));
+  const enrollmentNumberRaw = String(formData.get('adminEnrollmentNumber') ?? '').trim();
+
+  if (!studentName || !Number.isFinite(classId)) {
+    setMessage(message, 'Попълнете име и клас.', 'error');
+    return;
+  }
+
+  const enrollmentNumber = padEnrollmentNumber(enrollmentNumberRaw);
+  if (!enrollmentNumber || enrollmentNumber.length > 10) {
+    setMessage(message, 'Невалиден № записване.', 'error');
+    return;
+  }
+
+  const classSelect = root.querySelector('#adminStudentClass');
+  const selectedClassName = classSelect?.selectedOptions?.[0]?.textContent ?? '';
+  const grade = extractGradeFromClassName(selectedClassName, classId);
+
+  if (!grade) {
+    setMessage(message, 'Не може да се определи клас за генериране на код.', 'error');
+    return;
+  }
+
+  const studentCode = `${grade}U${enrollmentNumber}`.toUpperCase();
+  const parentCode = `${grade}RU${enrollmentNumber}`.toUpperCase();
+
+  const { data: insertedStudent, error: studentError } = await supabase
+    .from('students')
+    .insert([
+      {
+        full_name: studentName,
+        class_id: classId
+      }
+    ])
+    .select('id')
+    .single();
+
+  if (studentError || !insertedStudent) {
+    setMessage(message, `Грешка при създаване на ученик: ${studentError?.message ?? 'неизвестна грешка'}`, 'error');
+    return;
+  }
+
+  const studentId = insertedStudent.id;
+  const { error: codesError } = await supabase.from('enrollment_codes').insert([
+    {
+      code: studentCode,
+      role: 'student',
+      class_id: classId,
+      student_id: studentId
+    },
+    {
+      code: parentCode,
+      role: 'parent',
+      class_id: classId,
+      student_id: studentId
+    }
+  ]);
+
+  if (codesError) {
+    await supabase.from('students').delete().eq('id', studentId);
+    setMessage(
+      message,
+      `Ученикът не е записан заради кодове: ${codesError.message}. Проверете за дублиран № записване.`,
+      'error'
+    );
+    return;
+  }
+
+  form.reset();
+  await loadSelectOptions(root);
+  await refreshDashboard(root);
+  setMessage(message, `Ученикът е записан. Кодове: ${studentCode} и ${parentCode}.`, 'success');
+}
+
+async function handleParentLinkCreate(root, form) {
+  const message = root.querySelector('#admin-parent-link-message');
+  const formData = new FormData(form);
+
+  const parentEmail = String(formData.get('parentLinkEmail') ?? '').trim().toLowerCase();
+  const studentId = Number(formData.get('parentLinkStudent'));
+
+  if (!parentEmail || !Number.isFinite(studentId)) {
+    setMessage(message, 'Попълнете валиден имейл и ученик.', 'error');
+    return;
+  }
+
+  const { error } = await supabase.from('parent_email_student_links').insert([
+    {
+      parent_email: parentEmail,
+      student_id: studentId
+    }
+  ]);
+
+  if (error) {
+    if (error.code === '23505') {
+      setMessage(message, 'Тази връзка вече съществува.', 'neutral');
+      return;
+    }
+
+    setMessage(message, `Грешка при добавяне на връзка: ${error.message}`, 'error');
+    return;
+  }
+
+  form.reset();
+  setMessage(message, 'Връзката е добавена. Натиснете „Синхронизирай родители“.', 'success');
+}
+
+async function handleParentSync(root) {
+  const message = root.querySelector('#admin-parent-link-message');
+
+  setMessage(message, 'Синхронизиране...', 'neutral');
+
+  const { data, error } = await supabase.rpc('sync_parent_links_from_emails');
+
+  if (error) {
+    setMessage(message, `Грешка при синхронизация: ${error.message}`, 'error');
+    return;
+  }
+
+  const profiles = data?.profiles_upserted ?? 0;
+  const links = data?.parent_student_links_inserted ?? 0;
+  const updates = data?.profile_class_updates ?? 0;
+
+  setMessage(
+    message,
+    `Синхронизация успешно: профили ${profiles}, връзки ${links}, class обновявания ${updates}.`,
+    'success'
+  );
 }
 
 function toggleViews(root, isLoggedIn) {
@@ -287,6 +501,9 @@ export async function init(root) {
   const loginMessage = root.querySelector('#admin-login-message');
   const lessonForm = root.querySelector('#admin-lesson-form');
   const newsForm = root.querySelector('#admin-news-form');
+  const studentForm = root.querySelector('#admin-student-form');
+  const parentLinkForm = root.querySelector('#admin-parent-link-form');
+  const parentSyncButton = root.querySelector('#admin-parent-sync-btn');
   const logoutButton = root.querySelector('#admin-logout-btn');
 
   const { data: sessionData } = await supabase.auth.getSession();
@@ -331,6 +548,20 @@ export async function init(root) {
   newsForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
     await handleNewsCreate(root, newsForm);
+  });
+
+  studentForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    await handleStudentCreate(root, studentForm);
+  });
+
+  parentLinkForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    await handleParentLinkCreate(root, parentLinkForm);
+  });
+
+  parentSyncButton?.addEventListener('click', async () => {
+    await handleParentSync(root);
   });
 
   logoutButton?.addEventListener('click', async () => {

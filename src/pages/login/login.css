@@ -1,0 +1,11 @@
+#auth-message.text-success {
+  color: #198754;
+}
+
+#auth-message.text-danger {
+  color: #dc3545;
+}
+
+#auth-message.text-body-secondary {
+  color: #6c757d;
+}

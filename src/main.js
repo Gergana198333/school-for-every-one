@@ -3,7 +3,7 @@ import 'bootstrap-icons/font/bootstrap-icons.css';
 import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 import './styles/global.css';
 
-const subPagePaths = new Set(['/about', '/classes', '/contacts', '/news', '/admin']);
+const subPagePaths = new Set(['/about', '/classes', '/contacts', '/news', '/admin', '/login']);
 
 function ensureTrailingSlashRoute() {
   const { pathname, search, hash } = window.location;
@@ -60,7 +60,7 @@ async function loadComponent(name, target) {
 
   const module = await import(definition.js);
   if (typeof module.init === 'function') {
-    module.init(target);
+    await module.init(target);
   }
 }
 
@@ -75,7 +75,7 @@ async function loadPage(appElement) {
 
   const pageModule = await import(pageJs);
   if (typeof pageModule.init === 'function') {
-    pageModule.init(pageContent);
+    await pageModule.init(pageContent);
   }
 }
 

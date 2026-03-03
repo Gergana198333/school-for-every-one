@@ -1,12 +1,16 @@
 #admin-login-message.text-success,
 #admin-lesson-message.text-success,
-#admin-news-message.text-success {
+#admin-news-message.text-success,
+#admin-student-message.text-success,
+#admin-parent-link-message.text-success {
   color: #198754;
 }
 
 #admin-login-message.text-danger,
 #admin-lesson-message.text-danger,
-#admin-news-message.text-danger {
+#admin-news-message.text-danger,
+#admin-student-message.text-danger,
+#admin-parent-link-message.text-danger {
   color: #dc3545;
 }
 

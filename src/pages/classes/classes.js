@@ -22,6 +22,26 @@ function getRelationName(relation) {
 	return relation.name ?? '';
 }
 
+function setClassRoomNote(root, text) {
+	const note = root.querySelector('#class-room-note');
+	if (note) {
+		note.textContent = text;
+	}
+}
+
+function showClassRoomContent(root, visible) {
+	const content = root.querySelector('#class-room-content');
+	content?.classList.toggle('d-none', !visible);
+}
+
+function formatDate(value) {
+	if (!value) {
+		return '-';
+	}
+
+	return new Date(value).toLocaleString('bg-BG');
+}
+
 function renderClassCard(item) {
 	const className = item.className ?? getRelationName(item.classes) ?? item.name ?? '';
 	const grade = normalizeGrade(className || item.grade ?? item.class_grade ?? item.class ?? item.level);
@@ -38,6 +58,46 @@ function renderClassCard(item) {
 				<p class="mb-2"><strong>Следващ урок:</strong> ${nextLesson}</p>
 				<p class="mb-0"><strong>Учител:</strong> ${teacher}</p>
 			</article>
+		</div>
+	`;
+}
+
+function renderClassLessonItem(item) {
+	const teacher = item.teacher_name ?? item.teacher ?? 'Няма данни';
+	const publishedAt = formatDate(item.published_at);
+
+	return `
+		<li class="list-group-item">
+			<div class="fw-semibold">${item.title ?? 'Без заглавие'}</div>
+			<div class="small text-body-secondary">${item.description ?? 'Няма описание'}</div>
+			<div class="small text-body-secondary mt-1">Учител: ${teacher} • ${publishedAt}</div>
+		</li>
+	`;
+}
+
+function renderSubmissionItem(item) {
+	const studentName = item.students?.full_name ?? 'Няма данни';
+	const lessonTitle = item.lessons?.title ?? 'Няма данни';
+	const fileName = item.file_name ?? 'Няма файл';
+
+	return `
+		<li class="list-group-item">
+			<div class="fw-semibold">${studentName}</div>
+			<div class="small text-body-secondary">Урок: ${lessonTitle}</div>
+			<div class="small text-body-secondary">Файл: ${fileName}</div>
+		</li>
+	`;
+}
+
+function renderMessageItem(item) {
+	const name = item.user_profiles?.full_name ?? 'Потребител';
+	const role = item.user_profiles?.role ?? 'user';
+	const sentAt = formatDate(item.created_at);
+
+	return `
+		<div class="class-room-message-item">
+			<div class="class-room-meta">${name} (${role}) • ${sentAt}</div>
+			<div>${item.message ?? ''}</div>
 		</div>
 	`;
 }
@@ -107,6 +167,130 @@ async function loadClassesFromSupabase(root) {
 	grid.innerHTML = fallbackData.map(renderClassCard).join('');
 }
 
+async function loadClassRoomData(root, classId) {
+	const lessonsList = root.querySelector('#class-room-lessons');
+	const submissionsList = root.querySelector('#class-room-submissions');
+	const messagesBox = root.querySelector('#class-room-messages');
+
+	if (!lessonsList || !submissionsList || !messagesBox) {
+		return;
+	}
+
+	const [lessonsResult, submissionsResult, messagesResult] = await Promise.all([
+		supabase
+			.from('lessons')
+			.select('id, title, description, teacher_name, published_at')
+			.eq('class_id', classId)
+			.order('published_at', { ascending: false }),
+		supabase
+			.from('submissions')
+			.select('id, file_name, submitted_at, students!inner(full_name), lessons!inner(title, class_id)')
+			.eq('lessons.class_id', classId)
+			.order('submitted_at', { ascending: false })
+			.limit(20),
+		supabase
+			.from('class_room_messages')
+			.select('id, message, created_at, user_profiles(full_name, role)')
+			.eq('class_id', classId)
+			.order('created_at', { ascending: false })
+			.limit(50)
+	]);
+
+	if (lessonsResult.error) {
+		console.warn('Class room lessons error:', lessonsResult.error.message);
+	}
+
+	if (submissionsResult.error) {
+		console.warn('Class room submissions error:', submissionsResult.error.message);
+	}
+
+	if (messagesResult.error) {
+		console.warn('Class room messages error:', messagesResult.error.message);
+	}
+
+	const lessonsData = Array.isArray(lessonsResult.data) ? lessonsResult.data : [];
+	const submissionsData = Array.isArray(submissionsResult.data) ? submissionsResult.data : [];
+	const messagesData = Array.isArray(messagesResult.data) ? messagesResult.data : [];
+
+	lessonsList.innerHTML = lessonsData.length
+		? lessonsData.map(renderClassLessonItem).join('')
+		: '<li class="list-group-item">Няма качени задачи за този клас.</li>';
+
+	submissionsList.innerHTML = submissionsData.length
+		? submissionsData.map(renderSubmissionItem).join('')
+		: '<li class="list-group-item">Няма предадени домашни за този клас.</li>';
+
+	messagesBox.innerHTML = messagesData.length
+		? messagesData.map(renderMessageItem).join('')
+		: '<div class="text-body-secondary">Все още няма съобщения.</div>';
+}
+
+async function initClassRoom(root) {
+	const messageForm = root.querySelector('#class-room-message-form');
+	const messageInput = root.querySelector('#class-room-message-input');
+
+	const { data: sessionData } = await supabase.auth.getSession();
+	const session = sessionData?.session ?? null;
+
+	if (!session) {
+		setClassRoomNote(root, 'Влезте в профила си, за да видите стаята за вашия клас.');
+		showClassRoomContent(root, false);
+		return;
+	}
+
+	const { data: profile, error: profileError } = await supabase
+		.from('user_profiles')
+		.select('user_id, role, class_id, full_name')
+		.eq('user_id', session.user.id)
+		.single();
+
+	if (profileError || !profile) {
+		setClassRoomNote(root, 'Профилът ви не е свързан с клас. Моля, завършете регистрацията.');
+		showClassRoomContent(root, false);
+		return;
+	}
+
+	if (!['student', 'teacher', 'parent'].includes(profile.role)) {
+		setClassRoomNote(root, 'Посетителите могат да разглеждат сайта, но нямат достъп до класните стаи.');
+		showClassRoomContent(root, false);
+		return;
+	}
+
+	if (!profile.class_id) {
+		setClassRoomNote(root, 'Профилът няма зададен клас. Моля, задайте class_id в user_profiles.');
+		showClassRoomContent(root, false);
+		return;
+	}
+
+	setClassRoomNote(root, `Виждате данни за вашия клас (${profile.class_id}).`);
+	showClassRoomContent(root, true);
+	await loadClassRoomData(root, profile.class_id);
+
+	messageForm?.addEventListener('submit', async (event) => {
+		event.preventDefault();
+		const text = String(messageInput?.value ?? '').trim();
+		if (!text) {
+			return;
+		}
+
+		const { error } = await supabase.from('class_room_messages').insert([
+			{
+				class_id: profile.class_id,
+				user_id: session.user.id,
+				message: text
+			}
+		]);
+
+		if (error) {
+			console.error('Message insert error:', error.message);
+			return;
+		}
+
+		messageInput.value = '';
+		await loadClassRoomData(root, profile.class_id);
+	});
+}
+
 function applyGradeFilter(root, grade) {
 	const cards = root.querySelectorAll('.class-item');
 
@@ -119,6 +303,7 @@ function applyGradeFilter(root, grade) {
 
 export async function init(root) {
 	await loadClassesFromSupabase(root);
+	await initClassRoom(root);
 
 	const filterSelect = root.querySelector('#grade-filter');
 	if (!filterSelect) {

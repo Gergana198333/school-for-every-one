@@ -98,6 +98,6 @@
 
 ## Чеклист преди финализиране на промени
 - `npm run build` минава успешно.
-- Страниците `/, /classes, /about, /contacts, /news, /admin` се зареждат.
+- Страниците `/, /classes, /about, /contacts, /news, /admin, /login` се зареждат.
 - Няма счупени импорти и липсващи файлове.
 - UI е responsive на mobile и desktop.
