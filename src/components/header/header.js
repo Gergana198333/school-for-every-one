@@ -10,19 +10,23 @@ function getSearchTarget(query) {
   const normalized = query.toLowerCase();
 
   if (/клас|урок|обуч|lesson|class|ученик/.test(normalized)) {
-    return '/classes';
+    return '/classes/';
   }
 
   if (/новин|събит|event|news/.test(normalized)) {
-    return '/news';
+    return '/news/';
   }
 
   if (/контакт|въпрос|домашн|teacher|родител|contact/.test(normalized)) {
-    return '/contacts';
+    return '/contacts/';
+  }
+
+  if (/admin|админ|управление|dashboard/.test(normalized)) {
+    return '/admin/';
   }
 
   if (/училищ|за нас|мисия|about/.test(normalized)) {
-    return '/about';
+    return '/about/';
   }
 
   return '/';

@@ -1,6 +1,19 @@
 import 'bootstrap/dist/css/bootstrap.min.css';
+import 'bootstrap-icons/font/bootstrap-icons.css';
 import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 import './styles/global.css';
+
+const subPagePaths = new Set(['/about', '/classes', '/contacts', '/news', '/admin']);
+
+function ensureTrailingSlashRoute() {
+  const { pathname, search, hash } = window.location;
+  if (!subPagePaths.has(pathname)) {
+    return false;
+  }
+
+  window.location.replace(`${pathname}/${search}${hash}`);
+  return true;
+}
 
 const componentRegistry = {
   header: {
@@ -67,6 +80,10 @@ async function loadPage(appElement) {
 }
 
 async function bootstrapApp() {
+  if (ensureTrailingSlashRoute()) {
+    return;
+  }
+
   const appElement = document.getElementById('app');
   const componentSlots = appElement.querySelectorAll('[data-component]');
 

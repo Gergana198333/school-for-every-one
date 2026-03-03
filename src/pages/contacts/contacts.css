@@ -1,3 +1,7 @@
 #contact-form {
   border: 1px solid rgba(0, 0, 0, 0.05);
 }
+
+#contact-form .form-label i {
+  color: #1140d6;
+}

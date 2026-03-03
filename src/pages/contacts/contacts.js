@@ -32,8 +32,9 @@ async function submitToSupabase(form) {
   let uploadedFileUrl = null;
 
   if (hasHomeworkFile) {
-    const normalizedName = file.name.replace(/\s+/g, '-').toLowerCase();
-    const uniqueFileName = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${normalizedName}`;
+    const extension = file.name.includes('.') ? file.name.split('.').pop()?.toLowerCase() : '';
+    const safeExtension = extension && /^[a-z0-9]+$/.test(extension) ? extension : 'bin';
+    const uniqueFileName = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${safeExtension}`;
     const storagePath = `homework/${uniqueFileName}`;
 
     const { error: uploadError } = await supabase.storage
@@ -75,13 +76,20 @@ export function init(root) {
     submitButton?.setAttribute('disabled', 'disabled');
     setMessage(message, 'Изпращане...', 'neutral');
 
-    const { error } = await submitToSupabase(form);
+    let error = null;
+    try {
+      const result = await submitToSupabase(form);
+      error = result?.error ?? null;
+    } catch (runtimeError) {
+      error = runtimeError;
+    }
 
     submitButton?.removeAttribute('disabled');
 
     if (error) {
-      console.error('Contact form submit failed:', error.message);
-      setMessage(message, 'Възникна грешка при изпращане. Опитайте отново.', 'error');
+      const details = error?.message ? ` (${error.message})` : '';
+      console.error('Contact form submit failed:', error);
+      setMessage(message, `Възникна грешка при изпращане. Опитайте отново.${details}`, 'error');
       return;
     }
 

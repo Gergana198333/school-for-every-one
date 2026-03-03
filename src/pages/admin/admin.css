@@ -1,0 +1,20 @@
+#admin-login-message.text-success,
+#admin-lesson-message.text-success,
+#admin-news-message.text-success {
+  color: #198754;
+}
+
+#admin-login-message.text-danger,
+#admin-lesson-message.text-danger,
+#admin-news-message.text-danger {
+  color: #dc3545;
+}
+
+#admin-stats .card {
+  border: 1px solid rgba(15, 28, 63, 0.08);
+  border-radius: 0.75rem;
+}
+
+#admin-progress-table .progress {
+  height: 0.65rem;
+}

@@ -9,38 +9,18 @@ function normalizeGrade(value) {
 	const match = asString.match(/\d+/);
 	return match ? match[0] : asString;
 }
-import { supabase } from "../../supabaseClient";
 
-async function loadClasses() {
-  const { data, error } = await supabase
-    .from("classes")
-    .select("*")
-    .order("id", { ascending: true });
+function getRelationName(relation) {
+	if (!relation) {
+		return '';
+	}
 
-  if (error) {
-    console.error("Supabase error:", error);
-    return;
-  }
+	if (Array.isArray(relation)) {
+		return relation[0]?.name ?? '';
+	}
 
-  const container = document.getElementById("classes-list");
-
-  if (!container) {
-    console.error("Element with id 'classes-list' not found");
-    return;
-  }
-
-  container.innerHTML = data
-    .map(
-      (c) => `
-        <div class="class-card">
-          <h3>${c.name}</h3>
-        </div>
-      `
-    )
-    .join("");
+	return relation.name ?? '';
 }
-
-document.addEventListener("DOMContentLoaded", loadClasses);
 
 function renderClassCard(item) {
 	const className = item.className ?? getRelationName(item.classes) ?? item.name ?? '';

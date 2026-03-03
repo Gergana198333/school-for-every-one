@@ -17,7 +17,8 @@ export default defineConfig({
         classes: resolve(__dirname, 'classes/index.html'),
         about: resolve(__dirname, 'about/index.html'),
         contacts: resolve(__dirname, 'contacts/index.html'),
-        news: resolve(__dirname, 'news/index.html')
+        news: resolve(__dirname, 'news/index.html'),
+        admin: resolve(__dirname, 'admin/index.html')
       }
     }
   }

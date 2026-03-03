@@ -13,6 +13,7 @@
   - Копирай `.env.example` като `.env`
   - Попълни `VITE_SUPABASE_URL` и `VITE_SUPABASE_ANON_KEY`
   - По избор: смени `VITE_SUPABASE_HOMEWORK_BUCKET` (по подразбиране `homework-files`)
+  - За admin достъп: попълни `VITE_ADMIN_EMAILS` (списък с имейли, разделени със запетая)
 
 3. Стартиране на dev сървър:
 
@@ -27,6 +28,21 @@
    - `http://localhost:5000/about`
    - `http://localhost:5000/contacts`
    - `http://localhost:5000/news`
+  - `http://localhost:5000/admin/`
+
+## Админ панел
+
+- Страница: `/admin/`
+- Вход: Supabase Auth с имейл и парола (`signInWithPassword`)
+- Админ панелът позволява:
+  - създаване на уроци (`lessons`)
+  - публикуване на новини (`news_posts`)
+  - преглед на прогрес (`lesson_progress`), последни предавания (`submissions`) и общи статистики
+
+Важно:
+- Трябва да имаш създаден потребител в Supabase Auth (Email/Password), за да влезеш в `/admin/`.
+- Ако `VITE_ADMIN_EMAILS` е зададен, само имейлите в този allowlist имат достъп до dashboard-а.
+- Ако `VITE_ADMIN_EMAILS` липсва или е празен, admin dashboard е блокиран за всички (strict mode).
 
 ## Supabase таблици
 
@@ -48,6 +64,14 @@
 
 - Създай bucket `homework-files` (или името от `VITE_SUPABASE_HOMEWORK_BUCKET`)
 - Разреши `insert` за качване на файлове за anon/authenticated role според нужните policies
+
+## SQL Migration (Supabase)
+
+- Готов SQL файл: `supabase/migrations/001_initial_school_schema.sql`
+- Допълнителен SQL файл за новини: `supabase/migrations/002_news_posts_table.sql`
+- В Supabase Dashboard отвори **SQL Editor**
+- Постави съдържанието на файла и изпълни заявката
+- Това ще създаде базовите таблици и релации за `classes`, `subjects`, `students`, `parent_students`, `lessons`, `lesson_progress`, `submissions`, `contact_messages`, `news_posts`
 
 ## Структура на приложението
 

@@ -1,0 +1,123 @@
+<section class="page-hero">
+  <div class="container d-flex flex-column flex-md-row justify-content-between gap-3 align-items-md-center">
+    <div>
+      <h1 class="display-6 fw-semibold mb-2">Админ панел</h1>
+      <p class="lead mb-0">Управление на уроци, новини и напредък на учениците.</p>
+    </div>
+    <button class="btn btn-outline-primary d-none" id="admin-logout-btn" type="button">
+      <i class="bi bi-box-arrow-right me-2" aria-hidden="true"></i>Изход
+    </button>
+  </div>
+</section>
+
+<section class="container page-section" id="admin-login-view">
+  <div class="row justify-content-center">
+    <div class="col-lg-6">
+      <form class="bg-white p-4 rounded-3 shadow-sm" id="admin-login-form">
+        <h2 class="h5 mb-3">Вход за администратор</h2>
+        <div class="mb-3">
+          <label for="adminEmail" class="form-label">Имейл</label>
+          <input id="adminEmail" name="adminEmail" type="email" class="form-control" required />
+        </div>
+        <div class="mb-3">
+          <label for="adminPassword" class="form-label">Парола</label>
+          <input id="adminPassword" name="adminPassword" type="password" class="form-control" required />
+        </div>
+        <button type="submit" class="btn btn-primary">Вход</button>
+        <p class="mt-3 mb-0 d-none" id="admin-login-message"></p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<section class="container page-section d-none" id="admin-dashboard-view">
+  <div class="row g-3 mb-4" id="admin-stats"></div>
+
+  <div class="row g-4">
+    <div class="col-lg-6">
+      <article class="bg-white p-4 rounded-3 shadow-sm h-100">
+        <h2 class="h5 mb-3">Качи урок</h2>
+        <form id="admin-lesson-form">
+          <div class="mb-3">
+            <label for="lessonTitle" class="form-label">Заглавие</label>
+            <input id="lessonTitle" name="lessonTitle" class="form-control" required />
+          </div>
+          <div class="mb-3">
+            <label for="lessonDescription" class="form-label">Описание</label>
+            <textarea id="lessonDescription" name="lessonDescription" class="form-control" rows="3"></textarea>
+          </div>
+          <div class="mb-3">
+            <label for="lessonClass" class="form-label">Клас</label>
+            <select id="lessonClass" name="lessonClass" class="form-select" required></select>
+          </div>
+          <div class="mb-3">
+            <label for="lessonSubject" class="form-label">Предмет</label>
+            <select id="lessonSubject" name="lessonSubject" class="form-select" required></select>
+          </div>
+          <div class="mb-3">
+            <label for="lessonTeacher" class="form-label">Учител</label>
+            <input id="lessonTeacher" name="lessonTeacher" class="form-control" required />
+          </div>
+          <button type="submit" class="btn btn-primary">Запази урок</button>
+          <p class="mt-3 mb-0 d-none" id="admin-lesson-message"></p>
+        </form>
+      </article>
+    </div>
+
+    <div class="col-lg-6">
+      <article class="bg-white p-4 rounded-3 shadow-sm h-100">
+        <h2 class="h5 mb-3">Публикувай новина</h2>
+        <form id="admin-news-form">
+          <div class="mb-3">
+            <label for="newsTitle" class="form-label">Заглавие</label>
+            <input id="newsTitle" name="newsTitle" class="form-control" required />
+          </div>
+          <div class="mb-3">
+            <label for="newsContent" class="form-label">Съдържание</label>
+            <textarea id="newsContent" name="newsContent" class="form-control" rows="5" required></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary">Публикувай новина</button>
+          <p class="mt-3 mb-0 d-none" id="admin-news-message"></p>
+        </form>
+      </article>
+    </div>
+
+    <div class="col-12">
+      <article class="bg-white p-4 rounded-3 shadow-sm">
+        <h2 class="h5 mb-3">Напредък на учениците</h2>
+        <div class="table-responsive">
+          <table class="table align-middle" id="admin-progress-table">
+            <thead>
+              <tr>
+                <th>Ученик</th>
+                <th>Завършени</th>
+                <th>Общо</th>
+                <th>Прогрес</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+
+    <div class="col-12">
+      <article class="bg-white p-4 rounded-3 shadow-sm">
+        <h2 class="h5 mb-3">Последни предавания</h2>
+        <div class="table-responsive">
+          <table class="table align-middle" id="admin-submissions-table">
+            <thead>
+              <tr>
+                <th>Ученик</th>
+                <th>Урок</th>
+                <th>Файл</th>
+                <th>Дата</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
