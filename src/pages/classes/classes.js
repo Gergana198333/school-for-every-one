@@ -1000,23 +1000,28 @@ function applyGradeFilter(root, grade) {
 export async function init(root) {
 	const filterSelect = root.querySelector('#grade-filter');
 	const onlyWithFileCheckbox = root.querySelector('#geography-only-with-file');
+	const classRoomSection = root.querySelector('#class-room-section');
 	if (!filterSelect) {
 		await loadGeographyLessons(root, 'all');
 
-		try {
-			await initClassRoom(root);
-		} catch (error) {
-			console.warn('Class room init failed:', error?.message ?? error);
+		if (classRoomSection) {
+			try {
+				await initClassRoom(root);
+			} catch (error) {
+				console.warn('Class room init failed:', error?.message ?? error);
+			}
 		}
 		return;
 	}
 
 	await loadGeographyLessons(root, filterSelect.value);
 
-	try {
-		await initClassRoom(root);
-	} catch (error) {
-		console.warn('Class room init failed:', error?.message ?? error);
+	if (classRoomSection) {
+		try {
+			await initClassRoom(root);
+		} catch (error) {
+			console.warn('Class room init failed:', error?.message ?? error);
+		}
 	}
 
 	filterSelect.addEventListener('change', (event) => {
