@@ -54,7 +54,25 @@
         <div class="d-flex flex-wrap gap-2">
           <button type="submit" class="btn btn-primary" data-auth-action="login">Вход</button>
           <button type="button" class="btn btn-outline-primary" id="signup-btn">Регистрация</button>
+          <button type="button" class="btn btn-outline-secondary" id="reset-password-btn">Забравена парола</button>
         </div>
+
+        <div id="auth-recovery-wrap" class="d-none mt-3">
+          <div class="mb-3">
+            <label for="authNewPassword" class="form-label">Нова парола</label>
+            <input id="authNewPassword" type="password" class="form-control" minlength="6" />
+          </div>
+          <div class="mb-3">
+            <label for="authConfirmPassword" class="form-label">Потвърди парола</label>
+            <input id="authConfirmPassword" type="password" class="form-control" minlength="6" />
+          </div>
+          <button type="button" class="btn btn-primary" id="save-new-password-btn">Запази нова парола</button>
+        </div>
+
+        <p class="form-text mt-2 mb-0">
+          След регистрация е възможно да получите имейл за потвърждение. Потвърждението става от линк в пощата,
+          не от админ панела.
+        </p>
 
         <p class="mt-3 mb-0 d-none" id="auth-message"></p>
       </form>

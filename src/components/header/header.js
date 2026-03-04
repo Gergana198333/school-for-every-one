@@ -1,3 +1,5 @@
+import { supabase } from '../../supabaseClient';
+
 function normalizePath(path) {
   if (!path || path === '/') {
     return '/';
@@ -36,7 +38,16 @@ function getSearchTarget(query) {
   return '/';
 }
 
-export function init(root) {
+function updateAuthControls(root, session) {
+  const loginLink = root.querySelector('#header-login-link');
+  const logoutButton = root.querySelector('#header-logout-btn');
+  const isLoggedIn = Boolean(session?.user);
+
+  loginLink?.classList.toggle('d-none', isLoggedIn);
+  logoutButton?.classList.toggle('d-none', !isLoggedIn);
+}
+
+export async function init(root) {
   const currentPath = normalizePath(window.location.pathname);
   const links = root.querySelectorAll('.nav-link');
 
@@ -66,5 +77,19 @@ export function init(root) {
     const targetPath = getSearchTarget(query);
     const params = new URLSearchParams({ q: query });
     window.location.href = `${targetPath}?${params.toString()}`;
+  });
+
+  const logoutButton = root.querySelector('#header-logout-btn');
+
+  logoutButton?.addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/login/';
+  });
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  updateAuthControls(root, sessionData?.session ?? null);
+
+  supabase.auth.onAuthStateChange((_event, session) => {
+    updateAuthControls(root, session);
   });
 }

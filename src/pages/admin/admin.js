@@ -43,6 +43,24 @@ function setMessage(element, text, variant) {
   element.classList.add('text-body-secondary');
 }
 
+async function withTimeout(task, timeoutMs, timeoutMessage) {
+  let timeoutId;
+
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([task, timeoutPromise]);
+  } finally {
+    if (timeoutId) {
+      window.clearTimeout(timeoutId);
+    }
+  }
+}
+
 function pickFormValue(formData, keys) {
   for (const key of keys) {
     const value = formData.get(key);
@@ -528,6 +546,7 @@ async function handleStudentCreate(root, form) {
 
 async function handleParentLinkCreate(root, form) {
   const message = root.querySelector('#admin-parent-link-message');
+  const submitButton = form.querySelector('button[type="submit"]');
   const formData = new FormData(form);
 
   const parentEmail = String(formData.get('parentLinkEmail') ?? '').trim().toLowerCase();
@@ -538,6 +557,8 @@ async function handleParentLinkCreate(root, form) {
     return;
   }
 
+  submitButton?.setAttribute('disabled', 'disabled');
+
   const { error } = await supabase.from('parent_email_student_links').insert([
     {
       parent_email: parentEmail,
@@ -546,6 +567,8 @@ async function handleParentLinkCreate(root, form) {
   ]);
 
   if (error) {
+    submitButton?.removeAttribute('disabled');
+
     if (error.code === '23505') {
       setMessage(message, 'Тази връзка вече съществува.', 'neutral');
       return;
@@ -556,30 +579,56 @@ async function handleParentLinkCreate(root, form) {
   }
 
   form.reset();
-  setMessage(message, 'Връзката е добавена. Натиснете „Синхронизирай родители“.', 'success');
+  await handleParentSync(root, true);
+  submitButton?.removeAttribute('disabled');
 }
 
-async function handleParentSync(root) {
+async function handleParentSync(root, fromLinkCreate = false) {
   const message = root.querySelector('#admin-parent-link-message');
+  const parentSyncButton = root.querySelector('#admin-parent-sync-btn');
 
   setMessage(message, 'Синхронизиране...', 'neutral');
+  parentSyncButton?.setAttribute('disabled', 'disabled');
 
-  const { data, error } = await supabase.rpc('sync_parent_links_from_emails');
+  try {
+    const { data, error } = await withTimeout(
+      supabase.rpc('sync_parent_links_from_emails'),
+      12000,
+      'Заявката изтече (timeout).'
+    );
 
-  if (error) {
-    setMessage(message, `Грешка при синхронизация: ${error.message}`, 'error');
-    return;
+    if (error) {
+      setMessage(message, `Грешка при синхронизация: ${error.message}`, 'error');
+      return;
+    }
+
+    const profiles = data?.profiles_upserted ?? 0;
+    const links = data?.parent_student_links_inserted ?? 0;
+    const updates = data?.profile_class_updates ?? 0;
+
+    if (fromLinkCreate) {
+      setMessage(
+        message,
+        `Връзката е добавена и синхронизирана: профили ${profiles}, връзки ${links}, class обновявания ${updates}.`,
+        'success'
+      );
+      return;
+    }
+
+    setMessage(
+      message,
+      `Синхронизация успешно: профили ${profiles}, връзки ${links}, class обновявания ${updates}.`,
+      'success'
+    );
+  } catch (error) {
+    setMessage(
+      message,
+      `Синхронизацията не отговори навреме: ${error.message}. Проверете функцията sync_parent_links_from_emails в Supabase.`,
+      'error'
+    );
+  } finally {
+    parentSyncButton?.removeAttribute('disabled');
   }
-
-  const profiles = data?.profiles_upserted ?? 0;
-  const links = data?.parent_student_links_inserted ?? 0;
-  const updates = data?.profile_class_updates ?? 0;
-
-  setMessage(
-    message,
-    `Синхронизация успешно: профили ${profiles}, връзки ${links}, class обновявания ${updates}.`,
-    'success'
-  );
 }
 
 function toggleViews(root, isLoggedIn) {

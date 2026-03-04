@@ -96,11 +96,12 @@
 - Допълнителен SQL файл за admin policy върху файловете към уроци: `supabase/migrations/013_admin_lesson_materials_policy.sql`
 - Допълнителен SQL файл за Storage policies на файловете към уроци: `supabase/migrations/014_storage_lesson_materials_policies.sql`
 - Допълнителен SQL файл за fix на dashboard RLS (lesson_progress/submissions): `supabase/migrations/016_fix_dashboard_rls_policies.sql`
+- Допълнителен SQL файл за fix на parent sync RPC и права: `supabase/migrations/017_fix_parent_sync_rpc.sql`
 - В Supabase Dashboard отвори **SQL Editor**
 - Постави съдържанието на файла и изпълни заявката
 - Това ще създаде базовите таблици и релации за `classes`, `subjects`, `students`, `parent_students`, `lessons`, `lesson_progress`, `submissions`, `contact_messages`, `news_posts`, `user_profiles`, `class_room_messages` и по-строги RLS политики за класни стаи, родители, учители и admin bypass.
 
-Препоръчан ред за изпълнение на миграциите: `001` → `002` → `003` → `004` → `005` → `006` → `007` → `008` → `009` (по избор, за примерни данни) → `010` (по избор, за имейл sync) → `011` → `012` → `013` → `014` → `016`.
+Препоръчан ред за изпълнение на миграциите: `001` → `002` → `003` → `004` → `005` → `006` → `007` → `008` → `009` (по избор, за примерни данни) → `010` (по избор, за имейл sync) → `011` → `012` → `013` → `014` → `016` → `017`.
 
 ## Admin bypass (DB)
 

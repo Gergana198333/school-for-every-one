@@ -11,6 +11,12 @@
   text-transform: uppercase;
 }
 
+.top-link-button {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
 .top-link:hover {
   opacity: 0.9;
 }

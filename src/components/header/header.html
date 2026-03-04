@@ -1,9 +1,15 @@
 <header>
   <div class="top-links-bar py-2">
-    <div class="container d-flex justify-content-end gap-4">
+    <div class="container d-flex justify-content-end align-items-center gap-4 flex-wrap">
       <a class="top-link" href="/classes/" title="Ресурси за ученици"><i class="bi bi-backpack2 me-1" aria-hidden="true"></i>Ученици</a>
       <a class="top-link" href="/about/" title="Информация за преподаватели"><i class="bi bi-person-video3 me-1" aria-hidden="true"></i>Учители</a>
       <a class="top-link" href="/contacts/" title="Връзка с родители"><i class="bi bi-people-fill me-1" aria-hidden="true"></i>Родители</a>
+      <a id="header-login-link" class="top-link ms-xl-3" href="/login/" title="Вход в профил">
+        <i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i>Вход
+      </a>
+      <button id="header-logout-btn" class="top-link top-link-button ms-xl-3 d-none" type="button" title="Изход от профил">
+        <i class="bi bi-box-arrow-right me-1" aria-hidden="true"></i>Изход
+      </button>
     </div>
   </div>
 
@@ -32,7 +38,6 @@
           <li class="nav-item"><a class="nav-link" href="/classes/">Класове</a></li>
           <li class="nav-item"><a class="nav-link" href="/news/">Новини</a></li>
           <li class="nav-item"><a class="nav-link" href="/contacts/">Контакти</a></li>
-          <li class="nav-item"><a class="nav-link" href="/login/">Вход</a></li>
           <li class="nav-item"><a class="nav-link" href="/admin/">Админ</a></li>
           <li class="nav-item ms-xl-2 mt-2 mt-xl-0">
             <form class="header-search" id="header-search-form" role="search" aria-label="Търсене в сайта">
