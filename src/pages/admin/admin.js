@@ -43,24 +43,6 @@ function setMessage(element, text, variant) {
   element.classList.add('text-body-secondary');
 }
 
-async function withTimeout(task, timeoutMs, timeoutMessage) {
-  let timeoutId;
-
-  const timeoutPromise = new Promise((_, reject) => {
-    timeoutId = window.setTimeout(() => {
-      reject(new Error(timeoutMessage));
-    }, timeoutMs);
-  });
-
-  try {
-    return await Promise.race([task, timeoutPromise]);
-  } finally {
-    if (timeoutId) {
-      window.clearTimeout(timeoutId);
-    }
-  }
-}
-
 function pickFormValue(formData, keys) {
   for (const key of keys) {
     const value = formData.get(key);
@@ -103,7 +85,6 @@ async function loadSelectOptions(root) {
   const subjectInput = root.querySelector('#lessonSubjectInput');
   const subjectList = root.querySelector('#lessonSubjectList');
   const studentClassSelect = root.querySelector('#adminStudentClass');
-  const parentStudentSelect = root.querySelector('#parentLinkStudent');
 
   const [
     { data: classesData, error: classesError },
@@ -135,16 +116,6 @@ async function loadSelectOptions(root) {
     }
   }
 
-  if (!studentsError && Array.isArray(studentsData) && parentStudentSelect) {
-    const classNameById = new Map((classesData ?? []).map((item) => [item.id, item.name]));
-
-    parentStudentSelect.innerHTML = studentsData
-      .map((student) => {
-        const className = classNameById.get(student.class_id) ?? `Клас #${student.class_id ?? '-'}`;
-        return `<option value="${student.id}">${student.full_name} (${className})</option>`;
-      })
-      .join('');
-  }
 }
 
 async function loadStats(root) {
@@ -299,8 +270,57 @@ async function loadRecentStudentCodes(root) {
     .join('');
 }
 
+async function loadRegisteredParentsTable(root) {
+  const body = root.querySelector('#admin-parents-table tbody');
+  if (!body) {
+    return;
+  }
+
+  const { data: linksData, error: linksError } = await supabase
+    .from('parent_students')
+    .select('parent_user_id, student_id, students(full_name, classes(name))')
+    .order('id', { ascending: false })
+    .limit(100);
+
+  if (linksError || !Array.isArray(linksData) || linksData.length === 0) {
+    body.innerHTML = '<tr><td colspan="3" class="text-body-secondary">Няма регистрирани родители.</td></tr>';
+    return;
+  }
+
+  const parentIds = [...new Set(linksData.map((item) => item.parent_user_id).filter(Boolean))];
+  const { data: parentProfiles } = await supabase
+    .from('user_profiles')
+    .select('user_id, full_name, role')
+    .in('user_id', parentIds)
+    .eq('role', 'parent');
+
+  const parentNameById = new Map((parentProfiles ?? []).map((item) => [item.user_id, item.full_name || 'Родител']));
+
+  body.innerHTML = linksData
+    .map((item) => {
+      const parentName = parentNameById.get(item.parent_user_id) ?? 'Родител';
+      const studentName = item.students?.full_name ?? 'Няма данни';
+      const className = item.students?.classes?.name ?? 'Няма данни';
+
+      return `
+        <tr>
+          <td>${parentName}</td>
+          <td>${studentName}</td>
+          <td>${className}</td>
+        </tr>
+      `;
+    })
+    .join('');
+}
+
 async function refreshDashboard(root) {
-  await Promise.allSettled([loadStats(root), loadProgressTable(root), loadSubmissionsTable(root), loadRecentStudentCodes(root)]);
+  await Promise.allSettled([
+    loadStats(root),
+    loadProgressTable(root),
+    loadSubmissionsTable(root),
+    loadRecentStudentCodes(root),
+    loadRegisteredParentsTable(root)
+  ]);
 }
 
 async function getOrCreateSubjectId(subjectName) {
@@ -544,93 +564,6 @@ async function handleStudentCreate(root, form) {
   setMessage(message, `Ученикът е записан. Кодове: ${studentCode} и ${parentCode}.`, 'success');
 }
 
-async function handleParentLinkCreate(root, form) {
-  const message = root.querySelector('#admin-parent-link-message');
-  const submitButton = form.querySelector('button[type="submit"]');
-  const formData = new FormData(form);
-
-  const parentEmail = String(formData.get('parentLinkEmail') ?? '').trim().toLowerCase();
-  const studentId = Number(formData.get('parentLinkStudent'));
-
-  if (!parentEmail || !Number.isFinite(studentId)) {
-    setMessage(message, 'Попълнете валиден имейл и ученик.', 'error');
-    return;
-  }
-
-  submitButton?.setAttribute('disabled', 'disabled');
-
-  const { error } = await supabase.from('parent_email_student_links').insert([
-    {
-      parent_email: parentEmail,
-      student_id: studentId
-    }
-  ]);
-
-  if (error) {
-    submitButton?.removeAttribute('disabled');
-
-    if (error.code === '23505') {
-      setMessage(message, 'Тази връзка вече съществува.', 'neutral');
-      return;
-    }
-
-    setMessage(message, `Грешка при добавяне на връзка: ${error.message}`, 'error');
-    return;
-  }
-
-  form.reset();
-  await handleParentSync(root, true);
-  submitButton?.removeAttribute('disabled');
-}
-
-async function handleParentSync(root, fromLinkCreate = false) {
-  const message = root.querySelector('#admin-parent-link-message');
-  const parentSyncButton = root.querySelector('#admin-parent-sync-btn');
-
-  setMessage(message, 'Синхронизиране...', 'neutral');
-  parentSyncButton?.setAttribute('disabled', 'disabled');
-
-  try {
-    const { data, error } = await withTimeout(
-      supabase.rpc('sync_parent_links_from_emails'),
-      12000,
-      'Заявката изтече (timeout).'
-    );
-
-    if (error) {
-      setMessage(message, `Грешка при синхронизация: ${error.message}`, 'error');
-      return;
-    }
-
-    const profiles = data?.profiles_upserted ?? 0;
-    const links = data?.parent_student_links_inserted ?? 0;
-    const updates = data?.profile_class_updates ?? 0;
-
-    if (fromLinkCreate) {
-      setMessage(
-        message,
-        `Връзката е добавена и синхронизирана: профили ${profiles}, връзки ${links}, class обновявания ${updates}.`,
-        'success'
-      );
-      return;
-    }
-
-    setMessage(
-      message,
-      `Синхронизация успешно: профили ${profiles}, връзки ${links}, class обновявания ${updates}.`,
-      'success'
-    );
-  } catch (error) {
-    setMessage(
-      message,
-      `Синхронизацията не отговори навреме: ${error.message}. Проверете функцията sync_parent_links_from_emails в Supabase.`,
-      'error'
-    );
-  } finally {
-    parentSyncButton?.removeAttribute('disabled');
-  }
-}
-
 function toggleViews(root, isLoggedIn) {
   const loginView = root.querySelector('#admin-login-view');
   const dashboardView = root.querySelector('#admin-dashboard-view');
@@ -684,8 +617,6 @@ export async function init(root) {
   const lessonForm = root.querySelector('#admin-lesson-form, #lessonForm');
   const newsForm = root.querySelector('#admin-news-form, #newsForm');
   const studentForm = root.querySelector('#admin-student-form');
-  const parentLinkForm = root.querySelector('#admin-parent-link-form');
-  const parentSyncButton = root.querySelector('#admin-parent-sync-btn');
   const logoutButton = root.querySelector('#admin-logout-btn');
 
   const { data: sessionData } = await supabase.auth.getSession();
@@ -735,15 +666,6 @@ export async function init(root) {
   studentForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
     await handleStudentCreate(root, studentForm);
-  });
-
-  parentLinkForm?.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    await handleParentLinkCreate(root, parentLinkForm);
-  });
-
-  parentSyncButton?.addEventListener('click', async () => {
-    await handleParentSync(root);
   });
 
   logoutButton?.addEventListener('click', async () => {

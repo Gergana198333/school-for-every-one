@@ -5,6 +5,8 @@ const ADMIN_EMAILS = String(import.meta.env.VITE_ADMIN_EMAILS ?? '')
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
 
+const PENDING_ENROLLMENT_KEY = 'pendingEnrollmentClaim';
+
 function setMessage(element, text, variant) {
   if (!element) {
     return;
@@ -141,12 +143,93 @@ function isCodeBasedRole(role) {
   return role === 'student' || role === 'parent';
 }
 
+function normalizeEnrollmentNumber(value) {
+  const numeric = String(value ?? '').replace(/\D/g, '');
+  return numeric.padStart(5, '0');
+}
+
+function savePendingEnrollmentClaim(payload) {
+  try {
+    window.localStorage.setItem(PENDING_ENROLLMENT_KEY, JSON.stringify(payload));
+  } catch {
+  }
+}
+
+function readPendingEnrollmentClaim() {
+  try {
+    const raw = window.localStorage.getItem(PENDING_ENROLLMENT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearPendingEnrollmentClaim() {
+  try {
+    window.localStorage.removeItem(PENDING_ENROLLMENT_KEY);
+  } catch {
+  }
+}
+
+async function resolveParentCodeFromStudentNumber(studentNumber) {
+  const normalizedNumber = normalizeEnrollmentNumber(studentNumber);
+
+  const { data, error } = await supabase
+    .from('enrollment_codes')
+    .select('code, role, used_at')
+    .eq('role', 'parent')
+    .like('code', `%${normalizedNumber}`)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  const rows = Array.isArray(data) ? data : [];
+  if (rows.length === 0) {
+    throw new Error('Не е намерен родителски код за този номер на ученик.');
+  }
+
+  const unused = rows.filter((item) => !item.used_at);
+  const candidates = unused.length > 0 ? unused : rows;
+
+  if (candidates.length > 1) {
+    throw new Error('Открити са няколко ученици с този номер. Свържете се с админ за точен код.');
+  }
+
+  return candidates[0].code;
+}
+
+async function tryClaimPendingEnrollment(email) {
+  const pending = readPendingEnrollmentClaim();
+  if (!pending) {
+    return;
+  }
+
+  const normalizedEmail = String(email ?? '').trim().toLowerCase();
+  if (!normalizedEmail || normalizedEmail !== String(pending.email ?? '').trim().toLowerCase()) {
+    return;
+  }
+
+  const { error } = await supabase.rpc('claim_enrollment_code', {
+    p_code: String(pending.code ?? '').trim().toUpperCase(),
+    p_full_name: String(pending.fullName ?? '').trim() || null,
+    p_expected_role: pending.role
+  });
+
+  if (!error) {
+    clearPendingEnrollmentClaim();
+  }
+}
+
 function updateRoleDependentFields(root) {
   const roleSelect = root.querySelector('#authRole');
   const classWrap = root.querySelector('#auth-class-wrap');
   const classSelect = root.querySelector('#authClass');
   const codeWrap = root.querySelector('#auth-code-wrap');
   const codeInput = root.querySelector('#authSchoolCode');
+  const codeLabel = root.querySelector('label[for="authSchoolCode"]');
+  const codeHelp = root.querySelector('#auth-code-help');
 
   const role = String(roleSelect?.value ?? 'student').trim();
   const requiresCode = isCodeBasedRole(role);
@@ -159,6 +242,18 @@ function updateRoleDependentFields(root) {
   codeWrap?.classList.toggle('d-none', !requiresCode);
   if (codeInput) {
     codeInput.required = requiresCode;
+
+    if (role === 'parent') {
+      codeLabel && (codeLabel.textContent = 'Номер на ученика');
+      codeInput.placeholder = 'Пример: 00234';
+      codeInput.inputMode = 'numeric';
+      codeHelp && (codeHelp.textContent = 'За родител въведете номер на ученик (напр. 00234) или родителски код (напр. 5RU00234).');
+    } else {
+      codeLabel && (codeLabel.textContent = 'Код от училището');
+      codeInput.placeholder = 'Пример: 5U00234';
+      codeInput.inputMode = 'text';
+      codeHelp && (codeHelp.textContent = 'За ученици е задължителен код, издаден от училището.');
+    }
   }
 }
 
@@ -204,12 +299,11 @@ async function createTeacherProfile(authData, formData) {
   }
 }
 
-async function claimEnrollmentCode(formData, expectedRole) {
-  const code = String(formData.get('schoolCode') ?? '').trim().toUpperCase();
+async function claimEnrollmentCode(code, expectedRole, fullName) {
 
   const { error } = await supabase.rpc('claim_enrollment_code', {
-    p_code: code,
-    p_full_name: String(formData.get('fullName') ?? '').trim() || null,
+    p_code: String(code ?? '').trim().toUpperCase(),
+    p_full_name: String(fullName ?? '').trim() || null,
     p_expected_role: expectedRole
   });
 
@@ -265,6 +359,8 @@ async function handleLogin(root, form) {
     return;
   }
 
+  await tryClaimPendingEnrollment(email);
+
   setMessage(message, 'Успешен вход.', 'success');
   window.location.href = getUserRedirect(data?.user?.email ?? email);
 }
@@ -278,8 +374,10 @@ async function handleSignUp(root, form) {
     .toLowerCase();
   const password = String(formData.get('password') ?? '');
   const selectedRole = String(formData.get('role') ?? 'student').trim();
-  const schoolCode = String(formData.get('schoolCode') ?? '').trim().toUpperCase();
+  const schoolCodeRaw = String(formData.get('schoolCode') ?? '').trim().toUpperCase();
+  const fullName = String(formData.get('fullName') ?? '').trim();
   const teacherClass = String(formData.get('classId') ?? '').trim();
+  let enrollmentCode = schoolCodeRaw;
 
   if (!email || !password) {
     setMessage(message, 'Попълнете имейл и парола.', 'error');
@@ -287,15 +385,33 @@ async function handleSignUp(root, form) {
   }
 
   if (isCodeBasedRole(selectedRole)) {
-    const codePattern = selectedRole === 'parent' ? /^\d{1,2}RU\d{3,10}$/i : /^\d{1,2}U\d{3,10}$/i;
-    if (!schoolCode || !codePattern.test(schoolCode)) {
-      if (selectedRole === 'parent') {
-        setMessage(message, 'За роля „Родител“ въведете родителски код (пример: 5RU00234).', 'error');
+    if (selectedRole === 'parent') {
+      const parentCodePattern = /^\d{1,2}RU\d{3,10}$/i;
+      const numberPattern = /^\d{1,10}$/;
+
+      if (parentCodePattern.test(schoolCodeRaw)) {
+        enrollmentCode = schoolCodeRaw;
+      } else {
+        if (!schoolCodeRaw || !numberPattern.test(schoolCodeRaw)) {
+          setMessage(message, 'За роля „Родител“ въведете номер на ученик (само цифри) или родителски код (пример: 5RU00238).', 'error');
+          return;
+        }
+
+        try {
+          enrollmentCode = await resolveParentCodeFromStudentNumber(schoolCodeRaw);
+        } catch (resolveError) {
+          setMessage(message, resolveError.message, 'error');
+          return;
+        }
+      }
+    } else {
+      const codePattern = /^\d{1,2}U\d{3,10}$/i;
+      if (!schoolCodeRaw || !codePattern.test(schoolCodeRaw)) {
+        setMessage(message, 'За роля „Ученик“ въведете ученически код (пример: 5U00234).', 'error');
         return;
       }
 
-      setMessage(message, 'За роля „Ученик“ въведете ученически код (пример: 5U00234).', 'error');
-      return;
+      enrollmentCode = schoolCodeRaw;
     }
   }
 
@@ -312,7 +428,7 @@ async function handleSignUp(root, form) {
     options: {
       emailRedirectTo: getEmailRedirectTo(),
       data: {
-        full_name: String(formData.get('fullName') ?? '').trim(),
+        full_name: fullName,
         role: selectedRole
       }
     }
@@ -336,6 +452,13 @@ async function handleSignUp(root, form) {
   try {
     if (isCodeBasedRole(selectedRole)) {
       if (!data?.session) {
+        savePendingEnrollmentClaim({
+          email,
+          role: selectedRole,
+          code: enrollmentCode,
+          fullName
+        });
+
         const resendResult = await resendConfirmationEmail(email);
 
         if (resendResult.ok) {
@@ -355,7 +478,7 @@ async function handleSignUp(root, form) {
         return;
       }
 
-      await claimEnrollmentCode(formData, selectedRole);
+      await claimEnrollmentCode(enrollmentCode, selectedRole, fullName);
     } else {
       await createTeacherProfile(data, formData);
     }

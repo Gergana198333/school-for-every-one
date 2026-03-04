@@ -167,13 +167,26 @@ async function loadClassesFromSupabase(root) {
 	grid.innerHTML = fallbackData.map(renderClassCard).join('');
 }
 
-async function loadClassRoomData(root, classId) {
+async function loadClassRoomData(root, classId, options = {}) {
 	const lessonsList = root.querySelector('#class-room-lessons');
 	const submissionsList = root.querySelector('#class-room-submissions');
 	const messagesBox = root.querySelector('#class-room-messages');
+	const studentIds = Array.isArray(options.studentIds) ? options.studentIds.filter(Boolean) : [];
 
 	if (!lessonsList || !submissionsList || !messagesBox) {
 		return;
+	}
+
+	const submissionsQuery = supabase
+		.from('submissions')
+		.select('id, file_name, submitted_at, students!inner(full_name), lessons!inner(title, class_id)')
+		.order('submitted_at', { ascending: false })
+		.limit(20);
+
+	if (studentIds.length > 0) {
+		submissionsQuery.in('student_id', studentIds);
+	} else {
+		submissionsQuery.eq('lessons.class_id', classId);
 	}
 
 	const [lessonsResult, submissionsResult, messagesResult] = await Promise.all([
@@ -182,12 +195,7 @@ async function loadClassRoomData(root, classId) {
 			.select('id, title, description, teacher_name, published_at')
 			.eq('class_id', classId)
 			.order('published_at', { ascending: false }),
-		supabase
-			.from('submissions')
-			.select('id, file_name, submitted_at, students!inner(full_name), lessons!inner(title, class_id)')
-			.eq('lessons.class_id', classId)
-			.order('submitted_at', { ascending: false })
-			.limit(20),
+		submissionsQuery,
 		supabase
 			.from('class_room_messages')
 			.select('id, message, created_at, user_profiles(full_name, role)')
@@ -262,9 +270,37 @@ async function initClassRoom(root) {
 		return;
 	}
 
-	setClassRoomNote(root, `Виждате данни за вашия клас (${profile.class_id}).`);
+	let classId = profile.class_id;
+	let linkedStudentIds = [];
+
+	if (profile.role === 'parent') {
+		const { data: linkedStudents, error: linkedError } = await supabase
+			.from('parent_students')
+			.select('student_id, students(class_id, full_name)')
+			.eq('parent_user_id', session.user.id)
+			.order('id', { ascending: true });
+
+		if (linkedError || !Array.isArray(linkedStudents) || linkedStudents.length === 0) {
+			setClassRoomNote(root, 'Родителският профил още не е свързан с ученик.');
+			showClassRoomContent(root, false);
+			return;
+		}
+
+		linkedStudentIds = linkedStudents.map((item) => item.student_id).filter(Boolean);
+		classId = linkedStudents[0]?.students?.class_id ?? classId;
+
+		const studentNames = linkedStudents
+			.map((item) => item.students?.full_name)
+			.filter(Boolean)
+			.join(', ');
+
+		setClassRoomNote(root, `Виждате активността на ученик: ${studentNames || 'свързан ученик'}.`);
+	} else {
+		setClassRoomNote(root, `Виждате данни за вашия клас (${classId}).`);
+	}
+
 	showClassRoomContent(root, true);
-	await loadClassRoomData(root, profile.class_id);
+	await loadClassRoomData(root, classId, { studentIds: linkedStudentIds });
 
 	messageForm?.addEventListener('submit', async (event) => {
 		event.preventDefault();
@@ -275,7 +311,7 @@ async function initClassRoom(root) {
 
 		const { error } = await supabase.from('class_room_messages').insert([
 			{
-				class_id: profile.class_id,
+				class_id: classId,
 				user_id: session.user.id,
 				message: text
 			}
@@ -287,7 +323,7 @@ async function initClassRoom(root) {
 		}
 
 		messageInput.value = '';
-		await loadClassRoomData(root, profile.class_id);
+		await loadClassRoomData(root, classId, { studentIds: linkedStudentIds });
 	});
 }
 

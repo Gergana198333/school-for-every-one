@@ -153,39 +153,6 @@
 
     <div class="col-12">
       <article class="bg-white p-4 rounded-3 shadow-sm">
-        <h2 class="h5 mb-3">Родители и ученици (имейл връзка)</h2>
-        <form id="admin-parent-link-form" class="row g-3 align-items-end">
-          <div class="col-lg-5">
-            <label for="parentLinkEmail" class="form-label">Имейл на родител</label>
-            <input
-              id="parentLinkEmail"
-              name="parentLinkEmail"
-              type="email"
-              class="form-control"
-              placeholder="parent@example.com"
-              required
-            />
-          </div>
-          <div class="col-lg-5">
-            <label for="parentLinkStudent" class="form-label">Ученик</label>
-            <select id="parentLinkStudent" name="parentLinkStudent" class="form-select" required></select>
-          </div>
-          <div class="col-lg-2 d-grid">
-            <button type="submit" class="btn btn-primary">Добави връзка</button>
-          </div>
-        </form>
-
-        <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
-          <button id="admin-parent-sync-btn" class="btn btn-outline-primary" type="button">Синхронизирай родители</button>
-          <span class="text-body-secondary small">Изпълнява sync_parent_links_from_emails()</span>
-        </div>
-
-        <p class="mt-3 mb-0 d-none" id="admin-parent-link-message"></p>
-      </article>
-    </div>
-
-    <div class="col-12">
-      <article class="bg-white p-4 rounded-3 shadow-sm">
         <h2 class="h5 mb-3">Напредък на учениците</h2>
         <div class="table-responsive">
           <table class="table align-middle" id="admin-progress-table">
@@ -198,6 +165,28 @@
               </tr>
             </thead>
             <tbody></tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+
+    <div class="col-12">
+      <article class="bg-white p-4 rounded-3 shadow-sm">
+        <h2 class="h5 mb-3">Регистрирани родители</h2>
+        <div class="table-responsive">
+          <table class="table align-middle" id="admin-parents-table">
+            <thead>
+              <tr>
+                <th>Родител</th>
+                <th>Свързан ученик</th>
+                <th>Клас</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="3" class="text-body-secondary">Няма регистрирани родители.</td>
+              </tr>
+            </tbody>
           </table>
         </div>
       </article>
