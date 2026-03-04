@@ -28,6 +28,45 @@ const componentRegistry = {
   }
 };
 
+function clearStaleBootstrapOverlays() {
+  document.querySelectorAll('.modal-backdrop, .offcanvas-backdrop').forEach((element) => {
+    element.remove();
+  });
+
+  document.body.classList.remove('modal-open', 'offcanvas-open');
+  document.body.style.removeProperty('overflow');
+  document.body.style.removeProperty('padding-right');
+}
+
+function hasVisibleBootstrapLayer() {
+  const hasOpenModal = Boolean(document.querySelector('.modal.show'));
+  const hasOpenOffcanvas = Boolean(document.querySelector('.offcanvas.show'));
+  return hasOpenModal || hasOpenOffcanvas;
+}
+
+function installBootstrapOverlayGuard() {
+  const cleanupIfStale = () => {
+    if (!hasVisibleBootstrapLayer()) {
+      clearStaleBootstrapOverlays();
+    }
+  };
+
+  const observer = new MutationObserver(() => {
+    cleanupIfStale();
+  });
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['class', 'style']
+  });
+
+  window.addEventListener('pageshow', cleanupIfStale);
+  window.addEventListener('focus', cleanupIfStale);
+  cleanupIfStale();
+}
+
 function ensureStylesheet(path) {
   if (!path || document.head.querySelector(`link[data-ui-style="${path}"]`)) {
     return;
@@ -84,6 +123,10 @@ async function bootstrapApp() {
     return;
   }
 
+  installBootstrapOverlayGuard();
+
+  clearStaleBootstrapOverlays();
+
   const appElement = document.getElementById('app');
   const componentSlots = appElement.querySelectorAll('[data-component]');
 
@@ -93,6 +136,8 @@ async function bootstrapApp() {
   }
 
   await loadPage(appElement);
+
+  clearStaleBootstrapOverlays();
 }
 
 bootstrapApp().catch((error) => {

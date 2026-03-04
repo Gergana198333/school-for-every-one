@@ -22,6 +22,25 @@ function isAdminEmail(email) {
   return ADMIN_EMAILS.includes(String(email ?? '').trim().toLowerCase());
 }
 
+async function isAdminProfile(userId) {
+  if (!userId) {
+    return false;
+  }
+
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('role')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn('Admin profile check failed:', error.message);
+    return false;
+  }
+
+  return String(data?.role ?? '').trim().toLowerCase() === 'admin';
+}
+
 function setMessage(element, text, variant) {
   if (!element) {
     return;
@@ -574,29 +593,30 @@ function toggleViews(root, isLoggedIn) {
   logoutButton?.classList.toggle('d-none', !isLoggedIn);
 }
 
+async function logoutToLogin(root) {
+  try {
+    await supabase.auth.signOut();
+  } catch (error) {
+    console.warn('Admin logout failed:', error?.message ?? error);
+  }
+
+  toggleViews(root, false);
+  window.location.href = '/login/';
+}
+
 async function enforceAdminAccess(root, session, messageElement) {
-  if (ADMIN_EMAILS.length === 0) {
-    if (session) {
-      await supabase.auth.signOut();
-    }
-
-    toggleViews(root, false);
-    setMessage(
-      messageElement,
-      'Админ достъпът е изключен. Задайте VITE_ADMIN_EMAILS в .env с позволени имейли.',
-      'error'
-    );
-    return false;
-  }
-
   const userEmail = session?.user?.email ?? '';
+  const userId = session?.user?.id ?? '';
 
-  if (!session || !userEmail) {
+  if (!session) {
     toggleViews(root, false);
     return false;
   }
 
-  if (isAdminEmail(userEmail)) {
+  const allowedByEmail = Boolean(userEmail) && isAdminEmail(userEmail);
+  const allowedByRole = await isAdminProfile(userId);
+
+  if (allowedByEmail || allowedByRole) {
     toggleViews(root, true);
     return true;
   }
@@ -669,8 +689,7 @@ export async function init(root) {
   });
 
   logoutButton?.addEventListener('click', async () => {
-    await supabase.auth.signOut();
-    toggleViews(root, false);
+    await logoutToLogin(root);
   });
 
   supabase.auth.onAuthStateChange(async (_event, session) => {
