@@ -68,3 +68,12 @@
   color: #6c757d;
   font-size: 0.86rem;
 }
+
+.geography-lesson-link {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.geography-lesson-link:hover {
+  text-decoration: underline;
+}
