@@ -149,6 +149,38 @@ function resolveQuickLoginEntry(codeRaw) {
   return null;
 }
 
+async function resolveQuickLoginFromDatabase(code, password) {
+  const normalizedCode = String(code ?? '').trim().toUpperCase();
+  const normalizedPassword = String(password ?? '');
+
+  if (!normalizedCode || !normalizedPassword) {
+    return null;
+  }
+
+  const { data, error } = await supabase.rpc('resolve_quick_login', {
+    p_code: normalizedCode,
+    p_password: normalizedPassword
+  });
+
+  if (error) {
+    console.warn('Quick login RPC error:', error.message);
+    return null;
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+  const email = String(row?.login_email ?? '').trim().toLowerCase();
+
+  if (!email) {
+    return null;
+  }
+
+  return {
+    email,
+    authPassword: normalizedPassword,
+    quickPassword: null
+  };
+}
+
 function getUserRedirectByEmail(email) {
   const normalized = String(email ?? '').trim().toLowerCase();
   if (ADMIN_EMAILS.includes(normalized)) {
@@ -218,7 +250,8 @@ export async function init(root) {
       return;
     }
 
-    const quickEntry = resolveQuickLoginEntry(schoolCode);
+    const databaseEntry = await resolveQuickLoginFromDatabase(schoolCode, password);
+    const quickEntry = databaseEntry ?? resolveQuickLoginEntry(schoolCode);
     if (!quickEntry?.email) {
       setQuickLoginMessage(root, 'Номерът не е конфигуриран за бърз вход. Ползвайте страницата Вход.', 'error');
       return;

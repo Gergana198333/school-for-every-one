@@ -95,11 +95,15 @@
 - Допълнителен SQL файл за admin policy върху файловете към уроци: `supabase/migrations/013_admin_lesson_materials_policy.sql`
 - Допълнителен SQL файл за Storage policies на файловете към уроци: `supabase/migrations/014_storage_lesson_materials_policies.sql`
 - Допълнителен SQL файл за fix на dashboard RLS (lesson_progress/submissions): `supabase/migrations/016_fix_dashboard_rls_policies.sql`
+- Допълнителен SQL файл за quick login таблици (ученици/родители): `supabase/migrations/017_quick_login_tables.sql`
+- Допълнителен SQL файл за seed на quick login кодове за 5 клас: `supabase/migrations/018_seed_quick_login_codes_5_class.sql`
+- Допълнителен SQL файл за реални quick login имейли/пароли: `supabase/migrations/019_update_quick_login_real_emails.sql`
+- Допълнителен SQL файл за генерирани имейли/пароли за останалите quick login кодове: `supabase/migrations/020_generated_quick_login_credentials.sql`
 - В Supabase Dashboard отвори **SQL Editor**
 - Постави съдържанието на файла и изпълни заявката
 - Това ще създаде базовите таблици и релации за `classes`, `subjects`, `students`, `parent_students`, `lessons`, `lesson_progress`, `submissions`, `contact_messages`, `news_posts`, `user_profiles`, `class_room_messages` и по-строги RLS политики за класни стаи, родители, учители и admin bypass.
 
-Препоръчан ред за изпълнение на миграциите: `001` → `002` → `003` → `004` → `005` → `006` → `007` → `008` → `009` (по избор, за примерни данни) → `011` → `012` → `013` → `014` → `016`.
+Препоръчан ред за изпълнение на миграциите: `001` → `002` → `003` → `004` → `005` → `006` → `007` → `008` → `009` (по избор, за примерни данни) → `011` → `012` → `013` → `014` → `016` → `017` → `018` → `019` → `020`.
 
 ## Admin bypass (DB)
 
@@ -113,6 +117,20 @@
 - При регистрация кодът се валидира и маркира като използван в `enrollment_codes`.
 - За родители кодът свързва профила с конкретен ученик в `parent_students`.
 - За учители регистрацията остава с избор на клас (без код).
+
+## Синхронизация на quick login към Supabase Auth
+
+- След като изпълниш миграциите `017` → `020`, синхронизирай Auth потребителите с:
+
+  ```bash
+  npm run sync:quick-login-auth
+  ```
+
+- Нужно е в `.env` да има `SUPABASE_SERVICE_ROLE_KEY` (server-side ключ).
+- Скриптът чете `student_quick_login_codes` и `parent_quick_login_codes` и:
+  - създава липсващи Auth потребители;
+  - обновява парола на съществуващите;
+  - маркира `email_confirm: true`.
 
 ## Структура на приложението
 

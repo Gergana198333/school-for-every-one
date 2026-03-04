@@ -4,7 +4,8 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5000",
     "build": "vite build",
-    "preview": "vite preview --port 5000"
+    "preview": "vite preview --port 5000",
+    "sync:quick-login-auth": "node scripts/syncQuickLoginAuthUsers.mjs"
   },
   "keywords": [],
   "author": "",
