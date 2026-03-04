@@ -125,7 +125,7 @@ function formatDate(value) {
 
 function renderClassCard(item) {
 	const className = item.className ?? getRelationName(item.classes) ?? item.name ?? '';
-	const grade = normalizeGrade(className || item.grade ?? item.class_grade ?? item.class ?? item.level);
+	const grade = normalizeGrade(className || item.grade || item.class_grade || item.class || item.level);
 	const heading = className || (grade ? `${grade} клас` : 'Клас');
 	const subject = item.subject ?? getRelationName(item.subjects) ?? item.subject_name ?? 'Няма данни';
 	const nextLesson = item.next_lesson ?? item.title ?? item.lesson ?? item.nextLesson ?? 'Няма данни';
