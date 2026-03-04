@@ -53,6 +53,39 @@ function showAdminClassSelector(root, visible) {
 	wrap?.classList.toggle('d-none', !visible);
 }
 
+function setClassRoomControlsEnabled(root, enabled) {
+	const forms = [root.querySelector('#homework-submit-form'), root.querySelector('#class-room-message-form')];
+
+	for (const form of forms) {
+		if (!form) {
+			continue;
+		}
+
+		const controls = form.querySelectorAll('input, textarea, select, button');
+		controls.forEach((control) => {
+			control.disabled = !enabled;
+		});
+	}
+}
+
+function renderGuestClassRoomPreview(root) {
+	const lessonsList = root.querySelector('#class-room-lessons');
+	const submissionsList = root.querySelector('#class-room-submissions');
+	const messagesBox = root.querySelector('#class-room-messages');
+
+	if (lessonsList) {
+		lessonsList.innerHTML = '<li class="list-group-item text-body-secondary">Влезте, за да виждате задачите за класа.</li>';
+	}
+
+	if (submissionsList) {
+		submissionsList.innerHTML = '<li class="list-group-item text-body-secondary">Влезте, за да качвате PNG, Word или PDF домашни.</li>';
+	}
+
+	if (messagesBox) {
+		messagesBox.innerHTML = '<div class="text-body-secondary">Бележки до класа: достъпно за ученици, родители, учители и админ след вход.</div>';
+	}
+}
+
 async function populateAdminClassSelector(root, selectedClassId) {
 	const select = root.querySelector('#class-room-admin-class');
 	if (!select) {
@@ -229,6 +262,36 @@ async function resolveStudentIdForSubmission(sessionUserId, profile, linkedStude
 	return studentsData[0].id;
 }
 
+async function resolveStudentEnrollmentContext(sessionUserId) {
+	try {
+		const { data, error } = await supabase
+			.from('enrollment_codes')
+			.select('role, student_id, students(class_id, full_name)')
+			.eq('claimed_by_user_id', sessionUserId)
+			.eq('role', 'student')
+			.not('student_id', 'is', null)
+			.order('used_at', { ascending: false })
+			.limit(1);
+
+		if (error || !Array.isArray(data) || data.length === 0) {
+			if (error) {
+				console.warn('Enrollment context lookup failed:', error.message);
+			}
+			return null;
+		}
+
+		const row = data[0];
+		return {
+			studentId: row.student_id ?? null,
+			classId: row.students?.class_id ?? null,
+			fullName: row.students?.full_name ?? null
+		};
+	} catch (error) {
+		console.warn('Enrollment context exception:', error?.message ?? error);
+		return null;
+	}
+}
+
 async function populateHomeworkLessonOptions(root, classId) {
 	const select = root.querySelector('#homework-lesson-select');
 	if (!select) {
@@ -300,6 +363,13 @@ async function setupHomeworkSubmission(root, context) {
 
 		if (!file) {
 			setHomeworkSubmitMessage(root, 'Прикачете файл с домашната работа.', 'error');
+			return;
+		}
+
+		const allowedExtensions = ['png', 'pdf', 'doc', 'docx'];
+		const fileExtension = String(file.name ?? '').split('.').pop()?.toLowerCase() ?? '';
+		if (!allowedExtensions.includes(fileExtension)) {
+			setHomeworkSubmitMessage(root, 'Позволени формати: PNG, PDF, DOC, DOCX.', 'error');
 			return;
 		}
 
@@ -661,8 +731,12 @@ async function initClassRoom(root) {
 
 	if (!session) {
 		setClassRoomNote(root, 'Влезте в профила си, за да видите стаята за вашия клас.');
-		showClassRoomContent(root, false);
+		showClassRoomContent(root, true);
 		showClassRoomAuthCta(root, true);
+		showAdminClassSelector(root, false);
+		renderGuestClassRoomPreview(root);
+		setClassRoomControlsEnabled(root, false);
+		setHomeworkSubmitMessage(root, 'Влезте в профила си, за да качвате PNG, Word или PDF.', 'neutral');
 		return;
 	}
 
@@ -682,27 +756,58 @@ async function initClassRoom(root) {
 		};
 	}
 
+	if (!profile || profileError) {
+		const enrollmentContext = await resolveStudentEnrollmentContext(session.user.id);
+		if (enrollmentContext?.studentId) {
+			profile = {
+				user_id: session.user.id,
+				role: 'student',
+				class_id: enrollmentContext.classId,
+				full_name: enrollmentContext.fullName ?? session.user.user_metadata?.full_name ?? session.user.email ?? 'Ученик'
+			};
+		}
+	}
+
 	if (profileError || !profile) {
 		setClassRoomNote(root, 'Профилът ви не е свързан с клас. Моля, завършете регистрацията.');
-		showClassRoomContent(root, false);
+		showClassRoomContent(root, true);
 		showClassRoomAuthCta(root, true);
 		showAdminClassSelector(root, false);
+		renderGuestClassRoomPreview(root);
+		setClassRoomControlsEnabled(root, false);
+		setHomeworkSubmitMessage(root, 'Влезте в профила си, за да качвате PNG, Word или PDF.', 'neutral');
 		return;
 	}
 
 	if (!['student', 'teacher', 'parent', 'admin'].includes(profile.role)) {
 		setClassRoomNote(root, 'Посетителите могат да разглеждат сайта, но нямат достъп до класните стаи.');
-		showClassRoomContent(root, false);
+		showClassRoomContent(root, true);
 		showClassRoomAuthCta(root, true);
 		showAdminClassSelector(root, false);
+		renderGuestClassRoomPreview(root);
+		setClassRoomControlsEnabled(root, false);
+		setHomeworkSubmitMessage(root, 'Влезте в профила си, за да качвате PNG, Word или PDF.', 'neutral');
 		return;
 	}
 
-	if (!profile.class_id && profile.role !== 'admin') {
+	if (!profile.class_id && profile.role === 'student') {
+		const enrollmentContext = await resolveStudentEnrollmentContext(session.user.id);
+		if (enrollmentContext?.classId) {
+			profile.class_id = enrollmentContext.classId;
+			if (!profile.full_name && enrollmentContext.fullName) {
+				profile.full_name = enrollmentContext.fullName;
+			}
+		}
+	}
+
+	if (!profile.class_id && profile.role !== 'admin' && profile.role !== 'parent') {
 		setClassRoomNote(root, 'Профилът няма зададен клас. Моля, задайте class_id в user_profiles.');
-		showClassRoomContent(root, false);
+		showClassRoomContent(root, true);
 		showClassRoomAuthCta(root, true);
 		showAdminClassSelector(root, false);
+		renderGuestClassRoomPreview(root);
+		setClassRoomControlsEnabled(root, false);
+		setHomeworkSubmitMessage(root, 'Влезте в профила си, за да качвате PNG, Word или PDF.', 'neutral');
 		return;
 	}
 
@@ -723,9 +828,12 @@ async function initClassRoom(root) {
 
 	if (!classId) {
 		setClassRoomNote(root, 'Няма налични класове за зареждане на класна стая.');
-		showClassRoomContent(root, false);
+		showClassRoomContent(root, true);
 		showClassRoomAuthCta(root, true);
 		showAdminClassSelector(root, false);
+		renderGuestClassRoomPreview(root);
+		setClassRoomControlsEnabled(root, false);
+		setHomeworkSubmitMessage(root, 'Влезте в профила си, за да качвате PNG, Word или PDF.', 'neutral');
 		return;
 	}
 
@@ -738,9 +846,12 @@ async function initClassRoom(root) {
 
 		if (linkedError || !Array.isArray(linkedStudents) || linkedStudents.length === 0) {
 			setClassRoomNote(root, 'Родителският профил още не е свързан с ученик.');
-			showClassRoomContent(root, false);
+			showClassRoomContent(root, true);
 			showClassRoomAuthCta(root, true);
 			showAdminClassSelector(root, false);
+			renderGuestClassRoomPreview(root);
+			setClassRoomControlsEnabled(root, false);
+			setHomeworkSubmitMessage(root, 'Свържете родителския профил с ученик, за да качвате домашни.', 'error');
 			return;
 		}
 
@@ -762,6 +873,7 @@ async function initClassRoom(root) {
 	showClassRoomContent(root, true);
 	showClassRoomAuthCta(root, false);
 	showAdminClassSelector(root, profile.role === 'admin');
+	setClassRoomControlsEnabled(root, true);
 
 	let activeClassId = classId;
 	if (profile.role === 'admin') {
@@ -773,13 +885,16 @@ async function initClassRoom(root) {
 
 	if (!activeClassId) {
 		setClassRoomNote(root, 'Няма налични класове за зареждане на класна стая.');
-		showClassRoomContent(root, false);
+		showClassRoomContent(root, true);
 		showClassRoomAuthCta(root, true);
 		showAdminClassSelector(root, false);
+		renderGuestClassRoomPreview(root);
+		setClassRoomControlsEnabled(root, false);
+		setHomeworkSubmitMessage(root, 'Влезте в профила си, за да качвате PNG, Word или PDF.', 'neutral');
 		return;
 	}
 
-	const canSendClassMessages = profile.role === 'student' || profile.role === 'teacher' || profile.role === 'admin';
+	const canSendClassMessages = profile.role === 'student' || profile.role === 'teacher' || profile.role === 'admin' || profile.role === 'parent';
 	messageForm?.classList.toggle('d-none', !canSendClassMessages);
 	if (!canSendClassMessages) {
 		messageInput && (messageInput.value = '');
