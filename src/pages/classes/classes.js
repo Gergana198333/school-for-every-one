@@ -132,6 +132,13 @@ function getManualGeographyLessons(selectedGrade) {
 	const lessons = [
 		{
 			id: 'manual-geography-5-1',
+			title: 'Урок 1: България (PDF)',
+			published_at: new Date().toISOString(),
+			classes: { name: '5 клас' },
+			material_url: '/urok-1-bulgaria-geografia.pdf'
+		},
+		{
+			id: 'manual-geography-5-2',
 			title: 'Географско положение',
 			published_at: new Date().toISOString(),
 			classes: { name: '5 клас' },
@@ -218,7 +225,8 @@ async function loadGeographyLessons(root, selectedGrade = 'all') {
 		console.warn('Geography lessons load failed:', error?.message ?? error);
 	}
 
-	const mergedLessons = [...manualLessons, ...itemsWithLinks.filter((item) => item.id !== 'manual-geography-5-1')];
+	const manualIds = new Set(manualLessons.map((item) => item.id));
+	const mergedLessons = [...manualLessons, ...itemsWithLinks.filter((item) => !manualIds.has(item.id))];
 
 	const visibleItems = onlyWithFile ? mergedLessons.filter((item) => Boolean(item.material_url)) : mergedLessons;
 
