@@ -43,6 +43,17 @@ function setMessage(element, text, variant) {
   element.classList.add('text-body-secondary');
 }
 
+function pickFormValue(formData, keys) {
+  for (const key of keys) {
+    const value = formData.get(key);
+    if (value !== null && value !== undefined && String(value).trim() !== '') {
+      return value;
+    }
+  }
+
+  return '';
+}
+
 function renderStats(statsRoot, stats) {
   if (!statsRoot) {
     return;
@@ -142,6 +153,8 @@ async function loadProgressTable(root) {
     return;
   }
 
+  try {
+
   const [{ data: studentsData, error: studentsError }, { data: progressData, error: progressError }] = await Promise.all([
     supabase.from('students').select('id, full_name').order('full_name', { ascending: true }),
     supabase.from('lesson_progress').select('student_id, status')
@@ -184,6 +197,10 @@ async function loadProgressTable(root) {
       `;
     })
     .join('');
+  } catch (error) {
+    console.warn('Admin progress table load failed:', error?.message ?? error);
+    body.innerHTML = '<tr><td colspan="4">Временно недостъпни данни за прогрес.</td></tr>';
+  }
 }
 
 async function loadSubmissionsTable(root) {
@@ -191,6 +208,8 @@ async function loadSubmissionsTable(root) {
   if (!body) {
     return;
   }
+
+  try {
 
   const { data, error } = await supabase
     .from('submissions')
@@ -215,6 +234,10 @@ async function loadSubmissionsTable(root) {
       `
     )
     .join('');
+  } catch (error) {
+    console.warn('Admin submissions table load failed:', error?.message ?? error);
+    body.innerHTML = '<tr><td colspan="4">Временно недостъпни предавания.</td></tr>';
+  }
 }
 
 async function loadRecentStudentCodes(root) {
@@ -259,7 +282,7 @@ async function loadRecentStudentCodes(root) {
 }
 
 async function refreshDashboard(root) {
-  await Promise.all([loadStats(root), loadProgressTable(root), loadSubmissionsTable(root), loadRecentStudentCodes(root)]);
+  await Promise.allSettled([loadStats(root), loadProgressTable(root), loadSubmissionsTable(root), loadRecentStudentCodes(root)]);
 }
 
 async function getOrCreateSubjectId(subjectName) {
@@ -298,8 +321,8 @@ async function getOrCreateSubjectId(subjectName) {
 async function handleLessonCreate(root, form) {
   const message = root.querySelector('#admin-lesson-message');
   const formData = new FormData(form);
-  const materialFile = formData.get('lessonMaterial');
-  const subjectName = String(formData.get('lessonSubjectInput') ?? '').trim();
+  const materialFile = formData.get('lessonMaterial') ?? formData.get('material') ?? formData.get('file');
+  const subjectName = String(pickFormValue(formData, ['lessonSubjectInput', 'subject']) ?? '').trim();
 
   let subjectId;
   try {
@@ -310,11 +333,11 @@ async function handleLessonCreate(root, form) {
   }
 
   const payload = {
-    title: String(formData.get('lessonTitle') ?? '').trim(),
-    description: String(formData.get('lessonDescription') ?? '').trim(),
-    class_id: Number(formData.get('lessonClass')),
+    title: String(pickFormValue(formData, ['lessonTitle', 'title']) ?? '').trim(),
+    description: String(pickFormValue(formData, ['lessonDescription', 'description']) ?? '').trim(),
+    class_id: Number(pickFormValue(formData, ['lessonClass', 'classId', 'class_id'])),
     subject_id: subjectId,
-    teacher_name: String(formData.get('lessonTeacher') ?? '').trim(),
+    teacher_name: String(pickFormValue(formData, ['lessonTeacher', 'teacherName', 'teacher_name']) ?? '').trim(),
     published_at: new Date().toISOString()
   };
 
@@ -390,8 +413,8 @@ async function handleNewsCreate(root, form) {
   const formData = new FormData(form);
 
   const payload = {
-    title: String(formData.get('newsTitle') ?? '').trim(),
-    content: String(formData.get('newsContent') ?? '').trim(),
+    title: String(pickFormValue(formData, ['newsTitle', 'title']) ?? '').trim(),
+    content: String(pickFormValue(formData, ['newsContent', 'content']) ?? '').trim(),
     published_at: new Date().toISOString()
   };
 
@@ -609,8 +632,8 @@ async function enforceAdminAccess(root, session, messageElement) {
 export async function init(root) {
   const loginForm = root.querySelector('#admin-login-form');
   const loginMessage = root.querySelector('#admin-login-message');
-  const lessonForm = root.querySelector('#admin-lesson-form');
-  const newsForm = root.querySelector('#admin-news-form');
+  const lessonForm = root.querySelector('#admin-lesson-form, #lessonForm');
+  const newsForm = root.querySelector('#admin-news-form, #newsForm');
   const studentForm = root.querySelector('#admin-student-form');
   const parentLinkForm = root.querySelector('#admin-parent-link-form');
   const parentSyncButton = root.querySelector('#admin-parent-sync-btn');
