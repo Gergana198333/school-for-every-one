@@ -128,6 +128,24 @@ function renderGeographyLessonItem(item) {
 	`;
 }
 
+function getManualGeographyLessons(selectedGrade) {
+	const lessons = [
+		{
+			id: 'manual-geography-5-1',
+			title: 'Географско положение',
+			published_at: new Date().toISOString(),
+			classes: { name: '5 клас' },
+			material_url: '/geografsko-polozhenie.png'
+		}
+	];
+
+	if (selectedGrade === 'all') {
+		return lessons;
+	}
+
+	return lessons.filter((item) => normalizeGrade(getRelationName(item.classes)) === selectedGrade);
+}
+
 async function loadGeographyLessons(root, selectedGrade = 'all') {
 	const list = root.querySelector('#geography-lessons-list');
 	const onlyWithFileCheckbox = root.querySelector('#geography-only-with-file');
@@ -137,55 +155,72 @@ async function loadGeographyLessons(root, selectedGrade = 'all') {
 
 	const onlyWithFile = Boolean(onlyWithFileCheckbox?.checked);
 
-	const { data: lessonsData, error: lessonsError } = await supabase
-		.from('lessons')
-		.select('id, title, published_at, classes(name), subjects!inner(name)')
-		.order('published_at', { ascending: false })
-		.limit(100);
+	const manualLessons = getManualGeographyLessons(selectedGrade);
+	const initialVisible = onlyWithFile ? manualLessons.filter((item) => Boolean(item.material_url)) : manualLessons;
 
-	if (lessonsError || !Array.isArray(lessonsData)) {
-		list.innerHTML = '<li class="list-group-item text-body-secondary">Уроците по География са временно недостъпни.</li>';
-		setGeographyNote(root, 'В момента не може да се зареди списъкът с уроци.');
-		return;
+	if (initialVisible.length > 0) {
+		list.innerHTML = initialVisible.map(renderGeographyLessonItem).join('');
+		setGeographyNote(root, `Намерени уроци по География: ${initialVisible.length}.`);
+	} else {
+		list.innerHTML = '<li class="list-group-item text-body-secondary">Няма уроци по География с прикачен файл за избрания клас.</li>';
 	}
+	let itemsWithLinks = [];
 
-	const geographyLessons = lessonsData
-		.filter((item) => String(getRelationName(item.subjects)).toLowerCase().includes('географ'))
-		.filter((item) => {
-			if (selectedGrade === 'all') {
-				return true;
-			}
+	try {
+		const { data: lessonsData, error: lessonsError } = await supabase
+			.from('lessons')
+			.select('id, title, published_at, classes(name), subjects(name)')
+			.order('published_at', { ascending: false })
+			.limit(100);
 
-			const classGrade = normalizeGrade(getRelationName(item.classes));
-			return classGrade === selectedGrade;
-		});
-
-	if (geographyLessons.length === 0) {
-		list.innerHTML = '<li class="list-group-item text-body-secondary">Няма публикувани уроци по География за избрания клас.</li>';
-		setGeographyNote(root, 'Показват се уроците по География според избрания клас.');
-		return;
-	}
-
-	const lessonIds = geographyLessons.map((item) => item.id);
-	const { data: materialsData } = await supabase
-		.from('lesson_materials')
-		.select('lesson_id, file_url, file_path')
-		.in('lesson_id', lessonIds)
-		.order('id', { ascending: false });
-
-	const materialByLessonId = new Map();
-	for (const row of materialsData ?? []) {
-		if (!materialByLessonId.has(row.lesson_id)) {
-			materialByLessonId.set(row.lesson_id, row.file_url || row.file_path || null);
+		if (lessonsError) {
+			console.warn('Geography lessons query failed:', lessonsError.message);
 		}
+
+		const safeLessonsData = Array.isArray(lessonsData) ? lessonsData : [];
+
+		const geographyLessons = safeLessonsData
+			.filter((item) => String(getRelationName(item.subjects)).toLowerCase().includes('географ'))
+			.filter((item) => {
+				if (selectedGrade === 'all') {
+					return true;
+				}
+
+				const classGrade = normalizeGrade(getRelationName(item.classes));
+				return classGrade === selectedGrade;
+			});
+
+		const lessonIds = geographyLessons.map((item) => item.id);
+		let materialsData = [];
+
+		if (lessonIds.length > 0) {
+			const { data } = await supabase
+				.from('lesson_materials')
+				.select('lesson_id, file_url, file_path')
+				.in('lesson_id', lessonIds)
+				.order('id', { ascending: false });
+
+			materialsData = Array.isArray(data) ? data : [];
+		}
+
+		const materialByLessonId = new Map();
+		for (const row of materialsData ?? []) {
+			if (!materialByLessonId.has(row.lesson_id)) {
+				materialByLessonId.set(row.lesson_id, row.file_url || row.file_path || null);
+			}
+		}
+
+		itemsWithLinks = geographyLessons.map((item) => ({
+			...item,
+			material_url: materialByLessonId.get(item.id) || null
+		}));
+	} catch (error) {
+		console.warn('Geography lessons load failed:', error?.message ?? error);
 	}
 
-	const itemsWithLinks = geographyLessons.map((item) => ({
-		...item,
-		material_url: materialByLessonId.get(item.id) || null
-	}));
+	const mergedLessons = [...manualLessons, ...itemsWithLinks.filter((item) => item.id !== 'manual-geography-5-1')];
 
-	const visibleItems = onlyWithFile ? itemsWithLinks.filter((item) => Boolean(item.material_url)) : itemsWithLinks;
+	const visibleItems = onlyWithFile ? mergedLessons.filter((item) => Boolean(item.material_url)) : mergedLessons;
 
 	if (visibleItems.length === 0) {
 		list.innerHTML = '<li class="list-group-item text-body-secondary">Няма уроци по География с прикачен файл за избрания клас.</li>';
@@ -433,22 +468,29 @@ function applyGradeFilter(root, grade) {
 }
 
 export async function init(root) {
-	await loadClassesFromSupabase(root);
-	await initClassRoom(root);
-
 	const filterSelect = root.querySelector('#grade-filter');
 	const onlyWithFileCheckbox = root.querySelector('#geography-only-with-file');
 	if (!filterSelect) {
 		await loadGeographyLessons(root, 'all');
+
+		try {
+			await initClassRoom(root);
+		} catch (error) {
+			console.warn('Class room init failed:', error?.message ?? error);
+		}
 		return;
 	}
 
-	applyGradeFilter(root, filterSelect.value);
 	await loadGeographyLessons(root, filterSelect.value);
+
+	try {
+		await initClassRoom(root);
+	} catch (error) {
+		console.warn('Class room init failed:', error?.message ?? error);
+	}
 
 	filterSelect.addEventListener('change', (event) => {
 		const selectedGrade = event.target.value;
-		applyGradeFilter(root, selectedGrade);
 		loadGeographyLessons(root, selectedGrade);
 	});
 
