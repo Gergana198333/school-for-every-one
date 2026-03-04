@@ -34,6 +34,11 @@ function showClassRoomContent(root, visible) {
 	content?.classList.toggle('d-none', !visible);
 }
 
+function showClassRoomAuthCta(root, visible) {
+	const cta = root.querySelector('#class-room-auth-cta');
+	cta?.classList.toggle('d-none', !visible);
+}
+
 function formatDate(value) {
 	if (!value) {
 		return '-';
@@ -79,12 +84,19 @@ function renderSubmissionItem(item) {
 	const studentName = item.students?.full_name ?? 'Няма данни';
 	const lessonTitle = item.lessons?.title ?? 'Няма данни';
 	const fileName = item.file_name ?? 'Няма файл';
+	const filePath = item.file_path ?? '';
+	const hasFile = Boolean(filePath);
 
 	return `
 		<li class="list-group-item">
 			<div class="fw-semibold">${studentName}</div>
 			<div class="small text-body-secondary">Урок: ${lessonTitle}</div>
 			<div class="small text-body-secondary">Файл: ${fileName}</div>
+			${
+				hasFile
+					? `<button type="button" class="btn btn-sm btn-outline-primary mt-2" data-action="download-submission" data-file-path="${filePath}" data-file-name="${fileName}">Изтегли файл</button>`
+					: ''
+			}
 		</li>
 	`;
 }
@@ -100,6 +112,230 @@ function renderMessageItem(item) {
 			<div>${item.message ?? ''}</div>
 		</div>
 	`;
+}
+
+function setHomeworkSubmitMessage(root, text, variant = 'neutral') {
+	const message = root.querySelector('#homework-submit-message');
+	if (!message) {
+		return;
+	}
+
+	message.textContent = text;
+	message.classList.remove('text-success', 'text-danger', 'text-body-secondary');
+
+	if (variant === 'success') {
+		message.classList.add('text-success');
+		return;
+	}
+
+	if (variant === 'error') {
+		message.classList.add('text-danger');
+		return;
+	}
+
+	message.classList.add('text-body-secondary');
+}
+
+function sanitizeFileName(fileName) {
+	return String(fileName ?? '')
+		.trim()
+		.replace(/\s+/g, '-')
+		.replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+async function resolveStudentIdForSubmission(sessionUserId, profile, linkedStudentIds) {
+	if (profile.role === 'parent') {
+		return linkedStudentIds[0] ?? null;
+	}
+
+	if (profile.role !== 'student') {
+		return null;
+	}
+
+	try {
+		const { data, error } = await supabase
+			.from('enrollment_codes')
+			.select('student_id')
+			.eq('claimed_by_user_id', sessionUserId)
+			.eq('role', 'student')
+			.not('student_id', 'is', null)
+			.order('used_at', { ascending: false })
+			.limit(1);
+
+		if (!error && Array.isArray(data) && data[0]?.student_id) {
+			return data[0].student_id;
+		}
+	} catch (error) {
+		console.warn('Student lookup via enrollment code failed:', error?.message ?? error);
+	}
+
+	const { data: studentsData, error: studentsError } = await supabase
+		.from('students')
+		.select('id')
+		.eq('class_id', profile.class_id)
+		.eq('full_name', String(profile.full_name ?? '').trim())
+		.limit(1);
+
+	if (studentsError || !Array.isArray(studentsData) || !studentsData[0]?.id) {
+		if (studentsError) {
+			console.warn('Student lookup by full_name failed:', studentsError.message);
+		}
+		return null;
+	}
+
+	return studentsData[0].id;
+}
+
+async function populateHomeworkLessonOptions(root, classId) {
+	const select = root.querySelector('#homework-lesson-select');
+	if (!select) {
+		return;
+	}
+
+	const { data, error } = await supabase
+		.from('lessons')
+		.select('id, title')
+		.eq('class_id', classId)
+		.order('published_at', { ascending: false })
+		.limit(100);
+
+	if (error) {
+		console.warn('Homework lessons options load failed:', error.message);
+		select.innerHTML = '<option value="">Няма достъпни уроци</option>';
+		return;
+	}
+
+	const lessons = Array.isArray(data) ? data : [];
+	if (lessons.length === 0) {
+		select.innerHTML = '<option value="">Няма достъпни уроци</option>';
+		return;
+	}
+
+	select.innerHTML = ['<option value="">Изберете урок</option>', ...lessons.map((item) => `<option value="${item.id}">${item.title ?? 'Без заглавие'}</option>`)].join('');
+}
+
+async function setupHomeworkSubmission(root, context) {
+	const wrap = root.querySelector('#homework-submit-wrap');
+	const form = root.querySelector('#homework-submit-form');
+	const lessonSelect = root.querySelector('#homework-lesson-select');
+	const fileInput = root.querySelector('#homework-file-input');
+	const notesInput = root.querySelector('#homework-notes-input');
+
+	if (!wrap || !form || !lessonSelect || !fileInput || !notesInput) {
+		return;
+	}
+
+	const { session, profile, classId, linkedStudentIds } = context;
+
+	if (!['student', 'parent'].includes(profile.role)) {
+		wrap.classList.add('d-none');
+		return;
+	}
+
+	await populateHomeworkLessonOptions(root, classId);
+
+	const studentId = await resolveStudentIdForSubmission(session.user.id, profile, linkedStudentIds);
+	if (!studentId) {
+		setHomeworkSubmitMessage(root, 'Не е открит свързан ученик за подаване на домашно.', 'error');
+		form.querySelector('button[type="submit"]')?.setAttribute('disabled', 'disabled');
+		return;
+	}
+
+	setHomeworkSubmitMessage(root, 'Може да подадете домашна работа за избрания урок.');
+
+	form.addEventListener('submit', async (event) => {
+		event.preventDefault();
+
+		const lessonId = Number(lessonSelect.value);
+		const notes = String(notesInput.value ?? '').trim();
+		const file = fileInput.files?.[0] ?? null;
+
+		if (!Number.isFinite(lessonId) || lessonId <= 0) {
+			setHomeworkSubmitMessage(root, 'Изберете урок преди подаване.', 'error');
+			return;
+		}
+
+		if (!file) {
+			setHomeworkSubmitMessage(root, 'Прикачете файл с домашната работа.', 'error');
+			return;
+		}
+
+		setHomeworkSubmitMessage(root, 'Качване на домашната работа...');
+
+		const bucketName = String(import.meta.env.VITE_SUPABASE_HOMEWORK_BUCKET ?? 'homework').trim() || 'homework';
+		const safeName = sanitizeFileName(file.name);
+		const filePath = `submissions/${classId}/${studentId}/${Date.now()}-${safeName}`;
+
+		const { error: uploadError } = await supabase.storage.from(bucketName).upload(filePath, file, {
+			upsert: false
+		});
+
+		if (uploadError) {
+			console.warn('Homework upload error:', uploadError.message);
+			setHomeworkSubmitMessage(root, 'Неуспешно качване на файла. Проверете настройката на Storage bucket.', 'error');
+			return;
+		}
+
+		const { error: insertError } = await supabase.from('submissions').insert([
+			{
+				student_id: studentId,
+				lesson_id: lessonId,
+				notes: notes || null,
+				file_name: file.name,
+				file_path: filePath,
+				submitted_at: new Date().toISOString()
+			}
+		]);
+
+		if (insertError) {
+			console.warn('Homework insert error:', insertError.message);
+			setHomeworkSubmitMessage(root, 'Файлът е качен, но записът за домашното не беше създаден.', 'error');
+			return;
+		}
+
+		form.reset();
+		setHomeworkSubmitMessage(root, 'Домашната работа е подадена успешно.', 'success');
+		await loadClassRoomData(root, classId, { studentIds: linkedStudentIds });
+	});
+}
+
+async function openSubmissionFile(filePath) {
+	const normalizedPath = String(filePath ?? '').trim();
+	if (!normalizedPath) {
+		return;
+	}
+
+	if (/^https?:\/\//i.test(normalizedPath)) {
+		window.open(normalizedPath, '_blank', 'noopener,noreferrer');
+		return;
+	}
+
+	const bucketName = String(import.meta.env.VITE_SUPABASE_HOMEWORK_BUCKET ?? 'homework').trim() || 'homework';
+	const { data, error } = await supabase.storage.from(bucketName).createSignedUrl(normalizedPath, 60);
+
+	if (error || !data?.signedUrl) {
+		console.warn('Submission file URL error:', error?.message ?? 'No signed URL');
+		return;
+	}
+
+	window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+}
+
+function setupMessageComposer(messageForm, messageInput) {
+	if (!messageForm || !messageInput || messageInput.dataset.composerBound === 'true') {
+		return;
+	}
+
+	messageInput.addEventListener('keydown', (event) => {
+		if (event.key !== 'Enter' || event.shiftKey) {
+			return;
+		}
+
+		event.preventDefault();
+		messageForm.requestSubmit();
+	});
+
+	messageInput.dataset.composerBound = 'true';
 }
 
 function setGeographyNote(root, text) {
@@ -374,6 +610,7 @@ async function loadClassRoomData(root, classId, options = {}) {
 async function initClassRoom(root) {
 	const messageForm = root.querySelector('#class-room-message-form');
 	const messageInput = root.querySelector('#class-room-message-input');
+	const submissionsList = root.querySelector('#class-room-submissions');
 
 	const { data: sessionData } = await supabase.auth.getSession();
 	const session = sessionData?.session ?? null;
@@ -381,6 +618,7 @@ async function initClassRoom(root) {
 	if (!session) {
 		setClassRoomNote(root, 'Влезте в профила си, за да видите стаята за вашия клас.');
 		showClassRoomContent(root, false);
+		showClassRoomAuthCta(root, true);
 		return;
 	}
 
@@ -393,23 +631,45 @@ async function initClassRoom(root) {
 	if (profileError || !profile) {
 		setClassRoomNote(root, 'Профилът ви не е свързан с клас. Моля, завършете регистрацията.');
 		showClassRoomContent(root, false);
+		showClassRoomAuthCta(root, true);
 		return;
 	}
 
-	if (!['student', 'teacher', 'parent'].includes(profile.role)) {
+	if (!['student', 'teacher', 'parent', 'admin'].includes(profile.role)) {
 		setClassRoomNote(root, 'Посетителите могат да разглеждат сайта, но нямат достъп до класните стаи.');
 		showClassRoomContent(root, false);
+		showClassRoomAuthCta(root, true);
 		return;
 	}
 
-	if (!profile.class_id) {
+	if (!profile.class_id && profile.role !== 'admin') {
 		setClassRoomNote(root, 'Профилът няма зададен клас. Моля, задайте class_id в user_profiles.');
 		showClassRoomContent(root, false);
+		showClassRoomAuthCta(root, true);
 		return;
 	}
 
 	let classId = profile.class_id;
 	let linkedStudentIds = [];
+
+	if (profile.role === 'admin' && !classId) {
+		const { data: classesData, error: classesError } = await supabase
+			.from('classes')
+			.select('id, name')
+			.order('id', { ascending: true })
+			.limit(1);
+
+		if (!classesError && Array.isArray(classesData) && classesData[0]?.id) {
+			classId = classesData[0].id;
+		}
+	}
+
+	if (!classId) {
+		setClassRoomNote(root, 'Няма налични класове за зареждане на класна стая.');
+		showClassRoomContent(root, false);
+		showClassRoomAuthCta(root, true);
+		return;
+	}
 
 	if (profile.role === 'parent') {
 		const { data: linkedStudents, error: linkedError } = await supabase
@@ -421,6 +681,7 @@ async function initClassRoom(root) {
 		if (linkedError || !Array.isArray(linkedStudents) || linkedStudents.length === 0) {
 			setClassRoomNote(root, 'Родителският профил още не е свързан с ученик.');
 			showClassRoomContent(root, false);
+			showClassRoomAuthCta(root, true);
 			return;
 		}
 
@@ -433,12 +694,65 @@ async function initClassRoom(root) {
 			.join(', ');
 
 		setClassRoomNote(root, `Виждате активността на ученик: ${studentNames || 'свързан ученик'}.`);
+	} else if (profile.role === 'admin') {
+		setClassRoomNote(root, `Админ режим: виждате стаята на клас (${classId}) и можете да пишете.`);
 	} else {
 		setClassRoomNote(root, `Виждате данни за вашия клас (${classId}).`);
 	}
 
 	showClassRoomContent(root, true);
+	showClassRoomAuthCta(root, false);
+	const canSendClassMessages = profile.role === 'student' || profile.role === 'teacher' || profile.role === 'admin';
+	messageForm?.classList.toggle('d-none', !canSendClassMessages);
+	if (!canSendClassMessages) {
+		messageInput && (messageInput.value = '');
+	} else {
+		setupMessageComposer(messageForm, messageInput);
+	}
+
+	if (submissionsList && submissionsList.dataset.downloadBound !== 'true') {
+		submissionsList.addEventListener('click', async (event) => {
+			const target = event.target;
+			if (!(target instanceof HTMLElement)) {
+				return;
+			}
+
+			const button = target.closest('[data-action="download-submission"]');
+			if (!(button instanceof HTMLButtonElement)) {
+				return;
+			}
+
+			const filePath = button.dataset.filePath;
+			if (!filePath) {
+				return;
+			}
+
+			button.disabled = true;
+			const originalText = button.textContent;
+			button.textContent = 'Отваряне...';
+
+			try {
+				await openSubmissionFile(filePath);
+			} finally {
+				button.disabled = false;
+				button.textContent = originalText;
+			}
+		});
+
+		submissionsList.dataset.downloadBound = 'true';
+	}
+
+	await setupHomeworkSubmission(root, {
+		session,
+		profile,
+		classId,
+		linkedStudentIds
+	});
 	await loadClassRoomData(root, classId, { studentIds: linkedStudentIds });
+
+	if (!canSendClassMessages) {
+		return;
+	}
 
 	messageForm?.addEventListener('submit', async (event) => {
 		event.preventDefault();

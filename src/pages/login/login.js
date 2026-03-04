@@ -580,8 +580,15 @@ export async function init(root) {
   const message = root.querySelector('#auth-message');
   const roleSelect = root.querySelector('#authRole');
   const recoveryMode = isRecoveryMode();
+  const search = new URLSearchParams(window.location.search);
+  const requestedRole = String(search.get('role') ?? '').trim().toLowerCase();
 
   await loadClasses(root);
+
+  if (roleSelect && (requestedRole === 'student' || requestedRole === 'teacher' || requestedRole === 'parent')) {
+    roleSelect.value = requestedRole;
+  }
+
   updateRoleDependentFields(root);
   toggleRecoveryMode(root, recoveryMode);
 
