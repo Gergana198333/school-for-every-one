@@ -21,6 +21,23 @@
   opacity: 0.9;
 }
 
+.header-quick-login {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.header-quick-login .form-control {
+  max-width: 230px;
+  border-radius: 0.5rem;
+}
+
+.header-quick-login-message {
+  color: #e2efff;
+  font-size: 0.8rem;
+  min-height: 1.1rem;
+}
+
 .main-nav {
   border-bottom: 1px solid #e9edf4;
 }
@@ -113,6 +130,10 @@
     justify-content: center;
     gap: 1rem;
     flex-wrap: wrap;
+  }
+
+  .header-quick-login {
+    justify-content: center;
   }
 
   .brand-logo {
