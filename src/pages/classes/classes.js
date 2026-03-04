@@ -1,5 +1,14 @@
 import { supabase } from '../../supabaseClient';
 
+const ADMIN_EMAILS = String(import.meta.env.VITE_ADMIN_EMAILS ?? '')
+	.split(',')
+	.map((email) => email.trim().toLowerCase())
+	.filter(Boolean);
+
+function isAdminEmail(email) {
+	return ADMIN_EMAILS.includes(String(email ?? '').trim().toLowerCase());
+}
+
 function normalizeGrade(value) {
 	if (value === null || value === undefined) {
 		return '';
@@ -37,6 +46,40 @@ function showClassRoomContent(root, visible) {
 function showClassRoomAuthCta(root, visible) {
 	const cta = root.querySelector('#class-room-auth-cta');
 	cta?.classList.toggle('d-none', !visible);
+}
+
+function showAdminClassSelector(root, visible) {
+	const wrap = root.querySelector('#class-room-admin-wrap');
+	wrap?.classList.toggle('d-none', !visible);
+}
+
+async function populateAdminClassSelector(root, selectedClassId) {
+	const select = root.querySelector('#class-room-admin-class');
+	if (!select) {
+		return { firstClassId: null };
+	}
+
+	const { data, error } = await supabase.from('classes').select('id, name').order('name', { ascending: true });
+	if (error || !Array.isArray(data) || data.length === 0) {
+		select.innerHTML = '<option value="">Няма налични класове</option>';
+		return { firstClassId: null };
+	}
+
+	select.innerHTML = data
+		.map((item) => `<option value="${item.id}">${item.name ?? `Клас ${item.id}`}</option>`)
+		.join('');
+
+	const normalizedSelected = Number(selectedClassId);
+	if (Number.isFinite(normalizedSelected) && normalizedSelected > 0) {
+		select.value = String(normalizedSelected);
+	}
+
+	if (!select.value) {
+		select.value = String(data[0].id);
+	}
+
+	const selected = Number(select.value);
+	return { firstClassId: Number.isFinite(selected) && selected > 0 ? selected : null };
 }
 
 function formatDate(value) {
@@ -614,6 +657,7 @@ async function initClassRoom(root) {
 
 	const { data: sessionData } = await supabase.auth.getSession();
 	const session = sessionData?.session ?? null;
+	const normalizedSessionEmail = String(session?.user?.email ?? '').trim().toLowerCase();
 
 	if (!session) {
 		setClassRoomNote(root, 'Влезте в профила си, за да видите стаята за вашия клас.');
@@ -622,16 +666,27 @@ async function initClassRoom(root) {
 		return;
 	}
 
-	const { data: profile, error: profileError } = await supabase
+	const { data: profileData, error: profileError } = await supabase
 		.from('user_profiles')
 		.select('user_id, role, class_id, full_name')
 		.eq('user_id', session.user.id)
 		.single();
 
+	let profile = profileData;
+	if ((!profile || profileError) && isAdminEmail(normalizedSessionEmail)) {
+		profile = {
+			user_id: session.user.id,
+			role: 'admin',
+			class_id: null,
+			full_name: session.user.user_metadata?.full_name ?? session.user.email ?? 'Админ'
+		};
+	}
+
 	if (profileError || !profile) {
 		setClassRoomNote(root, 'Профилът ви не е свързан с клас. Моля, завършете регистрацията.');
 		showClassRoomContent(root, false);
 		showClassRoomAuthCta(root, true);
+		showAdminClassSelector(root, false);
 		return;
 	}
 
@@ -639,6 +694,7 @@ async function initClassRoom(root) {
 		setClassRoomNote(root, 'Посетителите могат да разглеждат сайта, но нямат достъп до класните стаи.');
 		showClassRoomContent(root, false);
 		showClassRoomAuthCta(root, true);
+		showAdminClassSelector(root, false);
 		return;
 	}
 
@@ -646,6 +702,7 @@ async function initClassRoom(root) {
 		setClassRoomNote(root, 'Профилът няма зададен клас. Моля, задайте class_id в user_profiles.');
 		showClassRoomContent(root, false);
 		showClassRoomAuthCta(root, true);
+		showAdminClassSelector(root, false);
 		return;
 	}
 
@@ -668,6 +725,7 @@ async function initClassRoom(root) {
 		setClassRoomNote(root, 'Няма налични класове за зареждане на класна стая.');
 		showClassRoomContent(root, false);
 		showClassRoomAuthCta(root, true);
+		showAdminClassSelector(root, false);
 		return;
 	}
 
@@ -682,6 +740,7 @@ async function initClassRoom(root) {
 			setClassRoomNote(root, 'Родителският профил още не е свързан с ученик.');
 			showClassRoomContent(root, false);
 			showClassRoomAuthCta(root, true);
+			showAdminClassSelector(root, false);
 			return;
 		}
 
@@ -702,6 +761,24 @@ async function initClassRoom(root) {
 
 	showClassRoomContent(root, true);
 	showClassRoomAuthCta(root, false);
+	showAdminClassSelector(root, profile.role === 'admin');
+
+	let activeClassId = classId;
+	if (profile.role === 'admin') {
+		const { firstClassId } = await populateAdminClassSelector(root, classId);
+		if (!activeClassId) {
+			activeClassId = firstClassId;
+		}
+	}
+
+	if (!activeClassId) {
+		setClassRoomNote(root, 'Няма налични класове за зареждане на класна стая.');
+		showClassRoomContent(root, false);
+		showClassRoomAuthCta(root, true);
+		showAdminClassSelector(root, false);
+		return;
+	}
+
 	const canSendClassMessages = profile.role === 'student' || profile.role === 'teacher' || profile.role === 'admin';
 	messageForm?.classList.toggle('d-none', !canSendClassMessages);
 	if (!canSendClassMessages) {
@@ -745,10 +822,26 @@ async function initClassRoom(root) {
 	await setupHomeworkSubmission(root, {
 		session,
 		profile,
-		classId,
+		classId: activeClassId,
 		linkedStudentIds
 	});
-	await loadClassRoomData(root, classId, { studentIds: linkedStudentIds });
+	await loadClassRoomData(root, activeClassId, { studentIds: linkedStudentIds });
+
+	const adminClassSelect = root.querySelector('#class-room-admin-class');
+	if (profile.role === 'admin' && adminClassSelect && adminClassSelect.dataset.bound !== 'true') {
+		adminClassSelect.addEventListener('change', async (event) => {
+			const selectedId = Number(event.target.value);
+			if (!Number.isFinite(selectedId) || selectedId <= 0) {
+				return;
+			}
+
+			activeClassId = selectedId;
+			setClassRoomNote(root, `Админ режим: виждате стаята на клас (${activeClassId}) и можете да пишете.`);
+			await loadClassRoomData(root, activeClassId, { studentIds: [] });
+		});
+
+		adminClassSelect.dataset.bound = 'true';
+	}
 
 	if (!canSendClassMessages) {
 		return;
@@ -763,7 +856,7 @@ async function initClassRoom(root) {
 
 		const { error } = await supabase.from('class_room_messages').insert([
 			{
-				class_id: classId,
+				class_id: activeClassId,
 				user_id: session.user.id,
 				message: text
 			}
@@ -775,7 +868,7 @@ async function initClassRoom(root) {
 		}
 
 		messageInput.value = '';
-		await loadClassRoomData(root, classId, { studentIds: linkedStudentIds });
+		await loadClassRoomData(root, activeClassId, { studentIds: linkedStudentIds });
 	});
 }
 

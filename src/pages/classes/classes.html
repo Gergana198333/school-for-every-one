@@ -58,7 +58,7 @@
     <p class="text-body-secondary mb-3" id="class-room-note">
       Влезте в профила си, за да видите задачи и разговори за вашия клас.
     </p>
-    <div class="alert alert-info d-none" id="class-room-auth-cta" role="status">
+    <div class="alert alert-info" id="class-room-auth-cta" role="status">
       <div class="mb-2">За да използвате „Домашна работа и разговори“, влезте в профила си:</div>
       <div class="d-flex flex-wrap gap-2">
         <a class="btn btn-sm btn-primary" href="/login/?role=student">Вход ученик</a>
@@ -68,6 +68,11 @@
     </div>
 
     <div class="row g-4 d-none" id="class-room-content">
+      <div class="col-12 d-none" id="class-room-admin-wrap">
+        <label for="class-room-admin-class" class="form-label fw-semibold mb-2">Админ: избери клас</label>
+        <select id="class-room-admin-class" class="form-select"></select>
+      </div>
+
       <div class="col-lg-6">
         <h3 class="h6 mb-3">Задачи от учителя</h3>
         <ul class="list-group" id="class-room-lessons"></ul>
