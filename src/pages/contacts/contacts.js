@@ -44,14 +44,12 @@ async function resolveClassNameById(classId) {
   return String(data?.name ?? '').trim();
 }
 
-async function prefillStudentFromProfile(root) {
-  const studentNameInput = root.querySelector('#studentName');
-  const studentClassInput = root.querySelector('#studentClass');
-
+async function resolveCurrentProfile() {
   const { data: sessionData } = await supabase.auth.getSession();
   const userId = sessionData?.session?.user?.id;
+
   if (!userId) {
-    return;
+    return null;
   }
 
   const { data: profile } = await supabase
@@ -61,10 +59,30 @@ async function prefillStudentFromProfile(root) {
     .maybeSingle();
 
   if (!profile) {
+    return null;
+  }
+
+  const className = await resolveClassNameById(profile.class_id);
+
+  return {
+    userId,
+    role: String(profile.role ?? ''),
+    fullName: String(profile.full_name ?? '').trim(),
+    classId: profile.class_id,
+    className
+  };
+}
+
+async function prefillStudentFromProfile(root) {
+  const studentNameInput = root.querySelector('#studentName');
+  const studentClassInput = root.querySelector('#studentClass');
+
+  const currentProfile = await resolveCurrentProfile();
+  if (!currentProfile) {
     return;
   }
 
-  const role = String(profile.role ?? '');
+  const { role, userId, fullName, className, classId } = currentProfile;
 
   if (role === 'parent') {
     const { data: linksData, error: linksError } = await supabase
@@ -91,17 +109,27 @@ async function prefillStudentFromProfile(root) {
   }
 
   if (role !== 'student') {
+    if (role === 'teacher') {
+      if (studentNameInput && !studentNameInput.value) {
+        studentNameInput.value = fullName;
+      }
+
+      if (studentClassInput && !studentClassInput.value && className) {
+        studentClassInput.value = className;
+      }
+    }
+
     return;
   }
 
   if (studentNameInput && !studentNameInput.value) {
-    studentNameInput.value = String(profile.full_name ?? '').trim();
+    studentNameInput.value = fullName;
   }
 
   if (studentClassInput && !studentClassInput.value) {
-    const className = await resolveClassNameById(profile.class_id);
-    if (className) {
-      studentClassInput.value = className;
+    const studentClassName = className || (await resolveClassNameById(classId));
+    if (studentClassName) {
+      studentClassInput.value = studentClassName;
     }
   }
 }
@@ -195,14 +223,30 @@ async function buildReplyTargets(root) {
 async function loadStudentReplies(root) {
   const repliesBody = root.querySelector('#student-replies-table tbody');
   const repliesMessage = root.querySelector('#student-replies-message');
+  const repliesTitle = root.querySelector('#student-replies-title');
 
   if (!repliesBody) {
     return;
   }
 
+  const currentProfile = await resolveCurrentProfile();
+  const role = String(currentProfile?.role ?? '');
+  const isTeacher = role === 'teacher';
+  const teacherClassToken = normalizeClassToken(currentProfile?.className);
+
+  if (repliesTitle) {
+    repliesTitle.textContent = isTeacher ? 'Съобщения за класа' : 'Отговори към ученика';
+  }
+
+  if (isTeacher && !teacherClassToken) {
+    repliesBody.innerHTML = '<tr><td colspan="4" class="text-body-secondary">Липсва клас в учителския профил.</td></tr>';
+    setMessage(repliesMessage, 'Добавете class_id в user_profiles за учителя.', 'error');
+    return;
+  }
+
   const replyTargets = await buildReplyTargets(root);
 
-  if (replyTargets.length === 0) {
+  if (!isTeacher && replyTargets.length === 0) {
     repliesBody.innerHTML = '<tr><td colspan="4" class="text-body-secondary">Попълнете име и клас, за да видите отговорите.</td></tr>';
     return;
   }
@@ -210,8 +254,7 @@ async function loadStudentReplies(root) {
   const { data, error } = await supabase
     .from('contact_messages')
     .select('id, student_name, student_class, message, reply_text, replied_at, created_at')
-    .not('reply_text', 'is', null)
-    .order('replied_at', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(200);
 
   if (error) {
@@ -224,6 +267,15 @@ async function loadStudentReplies(root) {
   const filteredRows = (Array.isArray(data) ? data : []).filter((row) => {
     const rowNameToken = normalizeNameToken(row.student_name);
     const rowClassToken = normalizeClassToken(row.student_class);
+
+    if (isTeacher) {
+      return rowClassToken === teacherClassToken;
+    }
+
+    if (!row.reply_text) {
+      return false;
+    }
+
     return replyTargets.some((target) => {
       const classMatches = target.studentClass === rowClassToken;
       const nameMatches = isReplyNameMatch(rowNameToken, target.name);
@@ -232,8 +284,8 @@ async function loadStudentReplies(root) {
   });
 
   if (filteredRows.length === 0) {
-    repliesBody.innerHTML = '<tr><td colspan="4" class="text-body-secondary">Все още няма отговори към вашите съобщения.</td></tr>';
-    setMessage(repliesMessage, 'Няма налични отговори.', 'neutral');
+    repliesBody.innerHTML = `<tr><td colspan="4" class="text-body-secondary">${isTeacher ? 'Все още няма съобщения за вашия клас.' : 'Все още няма отговори към вашите съобщения.'}</td></tr>`;
+    setMessage(repliesMessage, isTeacher ? 'Няма налични съобщения за класа.' : 'Няма налични отговори.', 'neutral');
     return;
   }
 
@@ -241,7 +293,7 @@ async function loadStudentReplies(root) {
     .map(
       (row) => `
         <tr>
-          <td>${row.message ?? '—'}</td>
+          <td><div class="fw-semibold">${row.student_name ?? '—'}</div><div class="small text-body-secondary">${row.message ?? '—'}</div></td>
           <td>${row.reply_text ?? '—'}</td>
           <td>${row.replied_at ? new Date(row.replied_at).toLocaleString('bg-BG') : (row.created_at ? new Date(row.created_at).toLocaleString('bg-BG') : '-')}</td>
           <td>
@@ -252,7 +304,7 @@ async function loadStudentReplies(root) {
     )
     .join('');
 
-  setMessage(repliesMessage, `Намерени отговори: ${filteredRows.length}.`, 'success');
+  setMessage(repliesMessage, isTeacher ? `Намерени съобщения за класа: ${filteredRows.length}.` : `Намерени отговори: ${filteredRows.length}.`, 'success');
 }
 
 async function deleteReplyMessage(root, messageId) {
