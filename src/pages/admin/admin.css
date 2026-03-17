@@ -2,7 +2,8 @@
 #admin-lesson-message.text-success,
 #admin-news-message.text-success,
 #admin-student-message.text-success,
-#admin-parent-link-message.text-success {
+#admin-parent-link-message.text-success,
+#admin-messages-message.text-success {
   color: #198754;
 }
 
@@ -10,7 +11,8 @@
 #admin-lesson-message.text-danger,
 #admin-news-message.text-danger,
 #admin-student-message.text-danger,
-#admin-parent-link-message.text-danger {
+#admin-parent-link-message.text-danger,
+#admin-messages-message.text-danger {
   color: #dc3545;
 }
 
@@ -31,4 +33,10 @@
 .admin-message-cell {
   min-width: 280px;
   white-space: normal;
+}
+
+.admin-message-actions {
+  min-width: 160px;
+  display: flex;
+  gap: 0.45rem;
 }

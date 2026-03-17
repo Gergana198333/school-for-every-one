@@ -5,3 +5,7 @@
 #contact-form .form-label i {
   color: #1140d6;
 }
+
+#student-replies-table td {
+  vertical-align: top;
+}

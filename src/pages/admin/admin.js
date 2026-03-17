@@ -257,12 +257,12 @@ async function loadMessagesTable(root) {
   try {
     const { data, error } = await supabase
       .from('contact_messages')
-      .select('id, student_name, student_class, message, homework_file_name, homework_file_url, created_at')
+      .select('id, student_name, student_class, message, homework_file_name, homework_file_url, created_at, reply_text, replied_at')
       .order('created_at', { ascending: false })
       .limit(20);
 
     if (error || !Array.isArray(data) || data.length === 0) {
-      body.innerHTML = '<tr><td colspan="5">Няма изпратени съобщения.</td></tr>';
+      body.innerHTML = '<tr><td colspan="6">Няма изпратени съобщения.</td></tr>';
       return;
     }
 
@@ -281,14 +281,71 @@ async function loadMessagesTable(root) {
             <td class="admin-message-cell">${row.message ?? '—'}</td>
             <td>${fileCell}</td>
             <td>${row.created_at ? new Date(row.created_at).toLocaleString('bg-BG') : '-'}</td>
+            <td>${row.reply_text ? `<div>${row.reply_text}</div><div class="admin-table-meta">${row.replied_at ? new Date(row.replied_at).toLocaleString('bg-BG') : ''}</div>` : '—'}</td>
+            <td class="admin-message-actions">
+              <button type="button" class="btn btn-sm btn-outline-primary" data-message-action="reply" data-message-id="${row.id}">Отговори</button>
+              <button type="button" class="btn btn-sm btn-outline-danger" data-message-action="delete" data-message-id="${row.id}">Изтрий</button>
+            </td>
           </tr>
         `;
       })
       .join('');
   } catch (error) {
     console.warn('Admin messages table load failed:', error?.message ?? error);
-    body.innerHTML = '<tr><td colspan="5">Временно недостъпни съобщения.</td></tr>';
+    body.innerHTML = '<tr><td colspan="6">Временно недостъпни съобщения.</td></tr>';
   }
+}
+
+async function replyToMessage(root, messageId, adminEmail) {
+  const statusMessage = root.querySelector('#admin-messages-message');
+  const replyText = window.prompt('Въведете отговор към ученика:');
+
+  if (replyText === null) {
+    return;
+  }
+
+  const normalizedReply = String(replyText).trim();
+  if (!normalizedReply) {
+    setMessage(statusMessage, 'Отговорът не може да е празен.', 'error');
+    return;
+  }
+
+  const { error } = await supabase
+    .from('contact_messages')
+    .update({
+      reply_text: normalizedReply,
+      replied_at: new Date().toISOString(),
+      replied_by: String(adminEmail ?? '').trim() || 'admin'
+    })
+    .eq('id', Number(messageId));
+
+  if (error) {
+    setMessage(statusMessage, `Грешка при отговор: ${error.message}`, 'error');
+    return;
+  }
+
+  setMessage(statusMessage, 'Отговорът е изпратен успешно.', 'success');
+  await loadMessagesTable(root);
+}
+
+async function deleteMessage(root, messageId) {
+  const statusMessage = root.querySelector('#admin-messages-message');
+  const confirmed = window.confirm('Сигурни ли сте, че искате да изтриете това съобщение?');
+
+  if (!confirmed) {
+    return;
+  }
+
+  const { error } = await supabase.from('contact_messages').delete().eq('id', Number(messageId));
+
+  if (error) {
+    setMessage(statusMessage, `Грешка при изтриване: ${error.message}`, 'error');
+    return;
+  }
+
+  setMessage(statusMessage, 'Съобщението е изтрито.', 'success');
+  await loadMessagesTable(root);
+  await loadStats(root);
 }
 
 async function loadRecentStudentCodes(root) {
@@ -682,6 +739,8 @@ export async function init(root) {
   const newsForm = root.querySelector('#admin-news-form, #newsForm');
   const studentForm = root.querySelector('#admin-student-form');
   const logoutButton = root.querySelector('#admin-logout-btn');
+  const messagesTable = root.querySelector('#admin-messages-table');
+  const currentAdminEmail = sessionData?.session?.user?.email ?? '';
 
   const { data: sessionData } = await supabase.auth.getSession();
   const isAllowedSession = await enforceAdminAccess(root, sessionData?.session ?? null, loginMessage);
@@ -730,6 +789,29 @@ export async function init(root) {
   studentForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
     await handleStudentCreate(root, studentForm);
+  });
+
+  messagesTable?.addEventListener('click', async (event) => {
+    const button = event.target instanceof HTMLElement ? event.target.closest('[data-message-action]') : null;
+    if (!button) {
+      return;
+    }
+
+    const messageId = button.getAttribute('data-message-id');
+    const action = button.getAttribute('data-message-action');
+
+    if (!messageId) {
+      return;
+    }
+
+    if (action === 'reply') {
+      await replyToMessage(root, messageId, currentAdminEmail);
+      return;
+    }
+
+    if (action === 'delete') {
+      await deleteMessage(root, messageId);
+    }
   });
 
   logoutButton?.addEventListener('click', async () => {
