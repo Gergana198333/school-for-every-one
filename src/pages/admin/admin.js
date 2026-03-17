@@ -250,32 +250,53 @@ async function loadSubmissionsTable(root) {
 
 async function loadMessagesTable(root) {
   const body = root.querySelector('#admin-messages-table tbody');
+  const onlyApplicationsToggle = root.querySelector('#admin-messages-only-applications');
+  const showOnlyApplications = Boolean(onlyApplicationsToggle?.checked);
   if (!body) {
     return;
   }
+
+  const isApplicationMessage = (row) => {
+    const studentName = String(row?.student_name ?? '').trim().toLowerCase();
+    const studentClass = String(row?.student_class ?? '').trim().toLowerCase();
+    const text = String(row?.message ?? '').trim().toLowerCase();
+
+    return (
+      studentName === 'нов кандидат' ||
+      studentClass === 'кандидат' ||
+      text.includes('кандидатствай') ||
+      text.includes('кандидатура')
+    );
+  };
 
   try {
     const { data, error } = await supabase
       .from('contact_messages')
       .select('id, student_name, student_class, message, homework_file_name, homework_file_url, created_at, reply_text, replied_at')
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(50);
 
-    if (error || !Array.isArray(data) || data.length === 0) {
+    const rows = Array.isArray(data) ? data : [];
+    const visibleRows = showOnlyApplications ? rows.filter(isApplicationMessage) : rows;
+
+    if (error || visibleRows.length === 0) {
       body.innerHTML = '<tr><td colspan="6">Няма изпратени съобщения.</td></tr>';
       return;
     }
 
-    body.innerHTML = data
+    body.innerHTML = visibleRows
       .map((row) => {
         const fileCell = row.homework_file_url
           ? `<a href="${row.homework_file_url}" target="_blank" rel="noopener noreferrer">${row.homework_file_name ?? 'Файл'}</a>`
           : '—';
+        const candidateBadge = isApplicationMessage(row)
+          ? '<span class="badge rounded-pill text-bg-warning admin-message-badge">Кандидатура</span>'
+          : '';
 
         return `
           <tr>
             <td>
-              <div>${row.student_name ?? 'Няма данни'}</div>
+              <div class="d-flex flex-wrap align-items-center gap-2">${row.student_name ?? 'Няма данни'} ${candidateBadge}</div>
               <div class="admin-table-meta">${row.student_class ?? 'Няма клас'}</div>
             </td>
             <td class="admin-message-cell">${row.message ?? '—'}</td>
@@ -740,6 +761,7 @@ export async function init(root) {
   const studentForm = root.querySelector('#admin-student-form');
   const logoutButton = root.querySelector('#admin-logout-btn');
   const messagesTable = root.querySelector('#admin-messages-table');
+  const onlyApplicationsToggle = root.querySelector('#admin-messages-only-applications');
   let currentAdminEmail = '';
 
   const { data: sessionData } = await supabase.auth.getSession();
@@ -815,6 +837,10 @@ export async function init(root) {
     if (action === 'delete') {
       await deleteMessage(root, messageId);
     }
+  });
+
+  onlyApplicationsToggle?.addEventListener('change', async () => {
+    await loadMessagesTable(root);
   });
 
   logoutButton?.addEventListener('click', async () => {

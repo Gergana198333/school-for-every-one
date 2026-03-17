@@ -205,6 +205,19 @@ function getUserRedirectByEmail(email) {
   return '/classes/';
 }
 
+async function notifyAdminForCandidateClick() {
+  const payload = {
+    student_name: 'Нов кандидат',
+    student_class: 'Кандидат',
+    message: `Натиснат бутон „Кандидатствай“ от нов потребител (${window.location.pathname}).`
+  };
+
+  const { error } = await supabase.from('contact_messages').insert([payload]);
+  if (error) {
+    console.warn('Candidate notify insert failed:', error.message);
+  }
+}
+
 export async function init(root) {
   const currentPath = normalizePath(window.location.pathname);
   const links = root.querySelectorAll('.nav-link');
@@ -243,6 +256,8 @@ export async function init(root) {
   const quickLoginForm = root.querySelector('#header-quick-login-form');
   const quickLoginCodeInput = root.querySelector('#header-quick-login-code');
   const quickLoginPasswordInput = root.querySelector('#header-quick-login-password');
+  const applyButton = root.querySelector('#header-apply-btn');
+  let currentSession = null;
 
   logoutButton?.addEventListener('click', async () => {
     await supabase.auth.signOut();
@@ -290,10 +305,24 @@ export async function init(root) {
     window.location.href = getUserRedirectByEmail(quickEntry.email);
   });
 
+  applyButton?.addEventListener('click', async (event) => {
+    const href = applyButton.getAttribute('href') || '/contacts/';
+
+    event.preventDefault();
+
+    if (!currentSession?.user) {
+      await notifyAdminForCandidateClick();
+    }
+
+    window.location.href = href;
+  });
+
   const { data: sessionData } = await supabase.auth.getSession();
-  updateAuthControls(root, sessionData?.session ?? null);
+  currentSession = sessionData?.session ?? null;
+  updateAuthControls(root, currentSession);
 
   supabase.auth.onAuthStateChange((_event, session) => {
+    currentSession = session ?? null;
     updateAuthControls(root, session);
   });
 }
