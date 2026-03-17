@@ -593,6 +593,19 @@ async function handleLessonCreate(root, form) {
 
 async function handleNewsCreate(root, form) {
   const message = root.querySelector('#admin-news-message');
+  const submitButton = form.querySelector('#publishNewsBtn');
+  const withTimeout = async (promise, timeoutMs, timeoutText) =>
+    Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        window.setTimeout(() => reject(new Error(timeoutText)), timeoutMs);
+      })
+    ]);
+
+  if (submitButton) {
+    submitButton.disabled = true;
+  }
+
   setMessage(message, 'Публикуване...', 'neutral');
 
   try {
@@ -629,9 +642,13 @@ async function handleNewsCreate(root, form) {
       }
 
       uploadedImagePath = `news/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.png`;
-      const { error: uploadError } = await supabase.storage
-        .from(NEWS_IMAGES_BUCKET)
-        .upload(uploadedImagePath, newsImageFile, { upsert: false, contentType: 'image/png' });
+      const { error: uploadError } = await withTimeout(
+        supabase.storage
+          .from(NEWS_IMAGES_BUCKET)
+          .upload(uploadedImagePath, newsImageFile, { upsert: false, contentType: 'image/png' }),
+        15000,
+        'Изтече времето за качване на снимката. Проверете връзката и опитайте отново.'
+      );
 
       if (uploadError) {
         setMessage(
@@ -646,7 +663,11 @@ async function handleNewsCreate(root, form) {
       payload.image_url = publicUrlData?.publicUrl ?? null;
     }
 
-    const { error } = await supabase.from('news_posts').insert([payload]);
+    const { error } = await withTimeout(
+      supabase.from('news_posts').insert([payload]),
+      15000,
+      'Изтече времето за публикуване на новината. Проверете връзката и опитайте отново.'
+    );
 
     if (error) {
       if (uploadedImagePath) {
@@ -665,6 +686,10 @@ async function handleNewsCreate(root, form) {
     setMessage(message, 'Новината е публикувана успешно.', 'success');
   } catch (error) {
     setMessage(message, `Неочаквана грешка: ${error?.message ?? error}`, 'error');
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+    }
   }
 }
 
