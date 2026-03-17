@@ -716,14 +716,23 @@ function toggleViews(root, isLoggedIn) {
 }
 
 async function logoutToLogin(root) {
+  const redirectToLogin = () => {
+    toggleViews(root, false);
+    window.location.href = '/login/';
+  };
+
   try {
-    await supabase.auth.signOut();
+    await Promise.race([
+      supabase.auth.signOut(),
+      new Promise((resolve) => {
+        window.setTimeout(resolve, 2500);
+      })
+    ]);
   } catch (error) {
     console.warn('Admin logout failed:', error?.message ?? error);
+  } finally {
+    redirectToLogin();
   }
-
-  toggleViews(root, false);
-  window.location.href = '/login/';
 }
 
 async function enforceAdminAccess(root, session, messageElement) {
