@@ -312,6 +312,10 @@ export async function init(root) {
 
     if (!currentSession?.user) {
       await notifyAdminForCandidateClick();
+      const targetUrl = new URL(href, window.location.origin);
+      targetUrl.searchParams.set('apply', '1');
+      window.location.href = `${targetUrl.pathname}${targetUrl.search}`;
+      return;
     }
 
     window.location.href = href;

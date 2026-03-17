@@ -376,11 +376,19 @@ async function submitToSupabase(form) {
 export function init(root) {
   const form = root.querySelector('#contact-form');
   const message = root.querySelector('#form-message');
+  const candidateNote = root.querySelector('#candidate-contact-note');
   const submitButton = form?.querySelector('button[type="submit"]');
   const loadRepliesButton = root.querySelector('#load-student-replies-btn');
   const repliesTable = root.querySelector('#student-replies-table');
   const studentNameInput = root.querySelector('#studentName');
   const studentClassInput = root.querySelector('#studentClass');
+  const queryParams = new URLSearchParams(window.location.search);
+  const isApplyFlow = queryParams.get('apply') === '1';
+
+  supabase.auth.getSession().then(({ data }) => {
+    const isLoggedIn = Boolean(data?.session?.user);
+    candidateNote?.classList.toggle('d-none', isLoggedIn || !isApplyFlow);
+  });
 
   prefillStudentFromProfile(root).finally(() => {
     loadStudentReplies(root);
