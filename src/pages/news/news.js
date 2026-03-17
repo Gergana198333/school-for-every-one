@@ -71,7 +71,7 @@ export async function init(root) {
 
 	const { data, error } = await supabase
 		.from('news_posts')
-		.select('id, title, content, published_at')
+		.select('id, title, content, image_url, published_at')
 		.order('published_at', { ascending: false })
 		.limit(12);
 

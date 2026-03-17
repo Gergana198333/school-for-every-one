@@ -1,6 +1,7 @@
 import { supabase } from '../../supabaseClient';
 
 const LESSON_MATERIAL_BUCKET = import.meta.env.VITE_SUPABASE_LESSON_BUCKET || 'lesson-materials';
+const NEWS_IMAGES_BUCKET = import.meta.env.VITE_SUPABASE_NEWS_BUCKET || 'news-images';
 const ALLOWED_LESSON_MATERIAL_TYPES = new Set([
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -8,6 +9,9 @@ const ALLOWED_LESSON_MATERIAL_TYPES = new Set([
   'application/vnd.openxmlformats-officedocument.presentationml.presentation'
 ]);
 const ALLOWED_LESSON_MATERIAL_EXTENSIONS = new Set(['pdf', 'docx', 'mp4', 'pptx']);
+const ALLOWED_NEWS_IMAGE_TYPES = new Set(['image/png']);
+const ALLOWED_NEWS_IMAGE_EXTENSIONS = new Set(['png']);
+const NEWS_IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 
 const ADMIN_EMAILS = String(import.meta.env.VITE_ADMIN_EMAILS ?? '')
   .split(',')
@@ -590,6 +594,7 @@ async function handleLessonCreate(root, form) {
 async function handleNewsCreate(root, form) {
   const message = root.querySelector('#admin-news-message');
   const formData = new FormData(form);
+  const newsImageFile = pickFormValue(formData, ['newsImage', 'image']);
 
   const payload = {
     title: String(pickFormValue(formData, ['newsTitle', 'title']) ?? '').trim(),
@@ -597,9 +602,49 @@ async function handleNewsCreate(root, form) {
     published_at: new Date().toISOString()
   };
 
+  const hasNewsImage = newsImageFile instanceof File && newsImageFile.size > 0;
+  let uploadedImagePath = '';
+
+  if (hasNewsImage) {
+    const extension = newsImageFile.name.includes('.') ? newsImageFile.name.split('.').pop()?.toLowerCase() : '';
+    const isAllowedType = !newsImageFile.type || ALLOWED_NEWS_IMAGE_TYPES.has(newsImageFile.type);
+    const isAllowedExtension = Boolean(extension) && ALLOWED_NEWS_IMAGE_EXTENSIONS.has(extension);
+
+    if (!isAllowedType || !isAllowedExtension) {
+      setMessage(message, 'Качете PNG снимка за новината.', 'error');
+      return;
+    }
+
+    if (newsImageFile.size > NEWS_IMAGE_MAX_SIZE_BYTES) {
+      setMessage(message, 'PNG снимката трябва да е до 5MB.', 'error');
+      return;
+    }
+
+    uploadedImagePath = `news/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.png`;
+    const { error: uploadError } = await supabase.storage
+      .from(NEWS_IMAGES_BUCKET)
+      .upload(uploadedImagePath, newsImageFile, { upsert: false, contentType: 'image/png' });
+
+    if (uploadError) {
+      setMessage(
+        message,
+        `Грешка при качване на PNG снимка: ${uploadError.message}. Проверете bucket ${NEWS_IMAGES_BUCKET}.`,
+        'error'
+      );
+      return;
+    }
+
+    const { data: publicUrlData } = supabase.storage.from(NEWS_IMAGES_BUCKET).getPublicUrl(uploadedImagePath);
+    payload.image_url = publicUrlData?.publicUrl ?? null;
+  }
+
   const { error } = await supabase.from('news_posts').insert([payload]);
 
   if (error) {
+    if (uploadedImagePath) {
+      await supabase.storage.from(NEWS_IMAGES_BUCKET).remove([uploadedImagePath]);
+    }
+
     setMessage(
       message,
       `Грешка при публикуване на новина: ${error.message}. Проверете дали има таблица news_posts.`,
