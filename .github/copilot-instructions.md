@@ -48,7 +48,7 @@
 - Ползвай `import.meta.env` променливи:
   - `VITE_SUPABASE_URL`
   - `VITE_SUPABASE_ANON_KEY`
-  - `VITE_SUPABASE_HOMEWORK_BUCKET` (по избор)
+   - `VITE_SUPABASE_HOMEWORK_BUCKET` (по избор)
 - Не hardcode-вай ключове/URL в кода.
 - При заявка към Supabase:
   - добавяй graceful fallback при празни/липсващи данни;

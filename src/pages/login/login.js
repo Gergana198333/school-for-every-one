@@ -84,6 +84,16 @@ function isAlreadyRegisteredError(error) {
   return message.includes('already registered') || message.includes('already exists') || message.includes('user_already_exists');
 }
 
+function isAlreadyRegisteredSignUpResult(signUpData) {
+  const user = signUpData?.user;
+  if (!user) {
+    return false;
+  }
+
+  const identities = user.identities;
+  return Array.isArray(identities) && identities.length === 0;
+}
+
 function startButtonCooldown(button, seconds) {
   if (!button) {
     return;
@@ -236,12 +246,12 @@ function updateRoleDependentFields(root) {
 
   classWrap?.classList.toggle('d-none', requiresCode);
   if (classSelect) {
-    classSelect.required = !requiresCode;
+    classSelect.required = false;
   }
 
   codeWrap?.classList.toggle('d-none', !requiresCode);
   if (codeInput) {
-    codeInput.required = requiresCode;
+    codeInput.required = false;
 
     if (role === 'parent') {
       codeLabel && (codeLabel.textContent = 'Номер на ученика');
@@ -446,6 +456,22 @@ async function handleSignUp(root, form) {
     }
 
     setMessage(message, `Неуспешна регистрация: ${error.message}`, 'error');
+    return;
+  }
+
+  if (isAlreadyRegisteredSignUpResult(data)) {
+    const resendResult = await resendConfirmationEmail(email);
+
+    if (resendResult.ok) {
+      setMessage(
+        message,
+        'Този имейл вече има акаунт. Ако не е потвърден, изпратихме нов имейл за потвърждение (Inbox/Spam). Ако е потвърден, използвайте „Вход“.',
+        'error'
+      );
+      return;
+    }
+
+    setMessage(message, 'Този имейл вече има акаунт. Използвайте „Вход“ или „Забравена парола“.', 'error');
     return;
   }
 
