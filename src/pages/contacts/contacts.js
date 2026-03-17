@@ -23,6 +23,13 @@ function setMessage(element, text, variant) {
   element.classList.add('text-body-secondary');
 }
 
+function normalizeNameToken(value) {
+  return String(value ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+}
+
 async function resolveClassNameById(classId) {
   const normalizedId = Number(classId);
   if (!Number.isFinite(normalizedId) || normalizedId <= 0) {
@@ -53,7 +60,37 @@ async function prefillStudentFromProfile(root) {
     .eq('user_id', userId)
     .maybeSingle();
 
-  if (!profile || String(profile.role ?? '') !== 'student') {
+  if (!profile) {
+    return;
+  }
+
+  const role = String(profile.role ?? '');
+
+  if (role === 'parent') {
+    const { data: linksData, error: linksError } = await supabase
+      .from('parent_students')
+      .select('student_id, students(full_name, class_id, classes(name))')
+      .eq('parent_user_id', userId)
+      .limit(1);
+
+    if (!linksError && Array.isArray(linksData) && linksData.length > 0) {
+      const firstStudent = linksData[0]?.students;
+      if (studentNameInput && !studentNameInput.value) {
+        studentNameInput.value = String(firstStudent?.full_name ?? '').trim();
+      }
+
+      if (studentClassInput && !studentClassInput.value) {
+        const className = String(firstStudent?.classes?.name ?? '').trim();
+        if (className) {
+          studentClassInput.value = className;
+        }
+      }
+    }
+
+    return;
+  }
+
+  if (role !== 'student') {
     return;
   }
 
@@ -75,17 +112,73 @@ function normalizeClassToken(value) {
   return number || raw;
 }
 
+async function buildReplyTargets(root) {
+  const targets = [];
+  const addTarget = (name, studentClass) => {
+    const normalizedName = normalizeNameToken(name);
+    const normalizedClass = normalizeClassToken(studentClass);
+    if (!normalizedName || !normalizedClass) {
+      return;
+    }
+
+    targets.push({
+      name: normalizedName,
+      studentClass: normalizedClass
+    });
+  };
+
+  const typedName = String(root.querySelector('#studentName')?.value ?? '').trim();
+  const typedClass = String(root.querySelector('#studentClass')?.value ?? '').trim();
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const userId = sessionData?.session?.user?.id;
+
+  if (userId) {
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('role, full_name, class_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    const role = String(profile?.role ?? '');
+
+    if (role === 'student') {
+      const className = await resolveClassNameById(profile?.class_id);
+      addTarget(profile?.full_name, className || typedClass);
+    }
+
+    if (role === 'parent') {
+      const { data: linksData, error: linksError } = await supabase
+        .from('parent_students')
+        .select('student_id, students(full_name, class_id, classes(name))')
+        .eq('parent_user_id', userId)
+        .limit(100);
+
+      if (!linksError && Array.isArray(linksData)) {
+        for (const item of linksData) {
+          addTarget(item?.students?.full_name, item?.students?.classes?.name);
+        }
+      }
+    }
+  }
+
+  addTarget(typedName, typedClass);
+
+  const deduped = [...new Map(targets.map((item) => [`${item.name}|${item.studentClass}`, item])).values()];
+  return deduped;
+}
+
 async function loadStudentReplies(root) {
   const repliesBody = root.querySelector('#student-replies-table tbody');
   const repliesMessage = root.querySelector('#student-replies-message');
-  const studentName = String(root.querySelector('#studentName')?.value ?? '').trim();
-  const studentClass = String(root.querySelector('#studentClass')?.value ?? '').trim();
 
   if (!repliesBody) {
     return;
   }
 
-  if (!studentName || !studentClass) {
+  const replyTargets = await buildReplyTargets(root);
+
+  if (replyTargets.length === 0) {
     repliesBody.innerHTML = '<tr><td colspan="3" class="text-body-secondary">Попълнете име и клас, за да видите отговорите.</td></tr>';
     return;
   }
@@ -105,10 +198,10 @@ async function loadStudentReplies(root) {
     return;
   }
 
-  const targetClassToken = normalizeClassToken(studentClass);
   const filteredRows = (Array.isArray(data) ? data : []).filter((row) => {
+    const rowNameToken = normalizeNameToken(row.student_name);
     const rowClassToken = normalizeClassToken(row.student_class);
-    return rowClassToken === targetClassToken;
+    return replyTargets.some((target) => target.name === rowNameToken && target.studentClass === rowClassToken);
   });
 
   if (filteredRows.length === 0) {
