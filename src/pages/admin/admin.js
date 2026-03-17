@@ -593,68 +593,79 @@ async function handleLessonCreate(root, form) {
 
 async function handleNewsCreate(root, form) {
   const message = root.querySelector('#admin-news-message');
-  const formData = new FormData(form);
-  const newsImageFile = pickFormValue(formData, ['newsImage', 'image']);
+  setMessage(message, 'Публикуване...', 'neutral');
 
-  const payload = {
-    title: String(pickFormValue(formData, ['newsTitle', 'title']) ?? '').trim(),
-    content: String(pickFormValue(formData, ['newsContent', 'content']) ?? '').trim(),
-    published_at: new Date().toISOString()
-  };
+  try {
+    const formData = new FormData(form);
+    const newsImageFile = pickFormValue(formData, ['newsImage', 'image']);
 
-  const hasNewsImage = newsImageFile instanceof File && newsImageFile.size > 0;
-  let uploadedImagePath = '';
+    const payload = {
+      title: String(pickFormValue(formData, ['newsTitle', 'title']) ?? '').trim(),
+      content: String(pickFormValue(formData, ['newsContent', 'content']) ?? '').trim(),
+      published_at: new Date().toISOString()
+    };
 
-  if (hasNewsImage) {
-    const extension = newsImageFile.name.includes('.') ? newsImageFile.name.split('.').pop()?.toLowerCase() : '';
-    const isAllowedType = !newsImageFile.type || ALLOWED_NEWS_IMAGE_TYPES.has(newsImageFile.type);
-    const isAllowedExtension = Boolean(extension) && ALLOWED_NEWS_IMAGE_EXTENSIONS.has(extension);
-
-    if (!isAllowedType || !isAllowedExtension) {
-      setMessage(message, 'Качете PNG снимка за новината.', 'error');
+    if (!payload.title || !payload.content) {
+      setMessage(message, 'Попълнете заглавие и съдържание.', 'error');
       return;
     }
 
-    if (newsImageFile.size > NEWS_IMAGE_MAX_SIZE_BYTES) {
-      setMessage(message, 'PNG снимката трябва да е до 5MB.', 'error');
-      return;
+    const hasNewsImage = newsImageFile instanceof File && Boolean(newsImageFile.name);
+    let uploadedImagePath = '';
+
+    if (hasNewsImage) {
+      const extension = newsImageFile.name.includes('.') ? newsImageFile.name.split('.').pop()?.toLowerCase() : '';
+      const isAllowedType = !newsImageFile.type || ALLOWED_NEWS_IMAGE_TYPES.has(newsImageFile.type);
+      const isAllowedExtension = Boolean(extension) && ALLOWED_NEWS_IMAGE_EXTENSIONS.has(extension);
+
+      if (!isAllowedType || !isAllowedExtension) {
+        setMessage(message, 'Качете PNG снимка за новината.', 'error');
+        return;
+      }
+
+      if (newsImageFile.size > NEWS_IMAGE_MAX_SIZE_BYTES) {
+        setMessage(message, 'PNG снимката трябва да е до 5MB.', 'error');
+        return;
+      }
+
+      uploadedImagePath = `news/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.png`;
+      const { error: uploadError } = await supabase.storage
+        .from(NEWS_IMAGES_BUCKET)
+        .upload(uploadedImagePath, newsImageFile, { upsert: false, contentType: 'image/png' });
+
+      if (uploadError) {
+        setMessage(
+          message,
+          `Грешка при качване на PNG снимка: ${uploadError.message}. Проверете bucket ${NEWS_IMAGES_BUCKET}.`,
+          'error'
+        );
+        return;
+      }
+
+      const { data: publicUrlData } = supabase.storage.from(NEWS_IMAGES_BUCKET).getPublicUrl(uploadedImagePath);
+      payload.image_url = publicUrlData?.publicUrl ?? null;
     }
 
-    uploadedImagePath = `news/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.png`;
-    const { error: uploadError } = await supabase.storage
-      .from(NEWS_IMAGES_BUCKET)
-      .upload(uploadedImagePath, newsImageFile, { upsert: false, contentType: 'image/png' });
+    const { error } = await supabase.from('news_posts').insert([payload]);
 
-    if (uploadError) {
+    if (error) {
+      if (uploadedImagePath) {
+        await supabase.storage.from(NEWS_IMAGES_BUCKET).remove([uploadedImagePath]);
+      }
+
       setMessage(
         message,
-        `Грешка при качване на PNG снимка: ${uploadError.message}. Проверете bucket ${NEWS_IMAGES_BUCKET}.`,
+        `Грешка при публикуване на новина: ${error.message}. Проверете дали има таблица news_posts.`,
         'error'
       );
       return;
     }
 
-    const { data: publicUrlData } = supabase.storage.from(NEWS_IMAGES_BUCKET).getPublicUrl(uploadedImagePath);
-    payload.image_url = publicUrlData?.publicUrl ?? null;
+    form.reset();
+    setMessage(message, 'Новината е публикувана успешно.', 'success');
+  } catch (error) {
+    setMessage(message, `Неочаквана грешка: ${error?.message ?? error}`, 'error');
   }
-
-  const { error } = await supabase.from('news_posts').insert([payload]);
-
-  if (error) {
-    if (uploadedImagePath) {
-      await supabase.storage.from(NEWS_IMAGES_BUCKET).remove([uploadedImagePath]);
-    }
-
-    setMessage(
-      message,
-      `Грешка при публикуване на новина: ${error.message}. Проверете дали има таблица news_posts.`,
-      'error'
-    );
-    return;
-  }
-
-  form.reset();
-  setMessage(message, 'Новината е публикувана успешно.', 'success');
 }
 
 function extractGradeFromClassName(className, classId) {
@@ -822,11 +833,6 @@ export async function init(root) {
   currentAdminEmail = sessionData?.session?.user?.email ?? '';
   const isAllowedSession = await enforceAdminAccess(root, sessionData?.session ?? null, loginMessage);
 
-  if (isAllowedSession) {
-    await loadSelectOptions(root);
-    await refreshDashboard(root);
-  }
-
   loginForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const formData = new FormData(loginForm);
@@ -900,6 +906,11 @@ export async function init(root) {
   logoutButton?.addEventListener('click', async () => {
     await logoutToLogin(root);
   });
+
+  if (isAllowedSession) {
+    await loadSelectOptions(root);
+    await refreshDashboard(root);
+  }
 
   supabase.auth.onAuthStateChange(async (_event, session) => {
     currentAdminEmail = session?.user?.email ?? '';
