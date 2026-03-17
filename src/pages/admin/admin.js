@@ -248,6 +248,49 @@ async function loadSubmissionsTable(root) {
   }
 }
 
+async function loadMessagesTable(root) {
+  const body = root.querySelector('#admin-messages-table tbody');
+  if (!body) {
+    return;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('contact_messages')
+      .select('id, student_name, student_class, message, homework_file_name, homework_file_url, created_at')
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    if (error || !Array.isArray(data) || data.length === 0) {
+      body.innerHTML = '<tr><td colspan="5">Няма изпратени съобщения.</td></tr>';
+      return;
+    }
+
+    body.innerHTML = data
+      .map((row) => {
+        const fileCell = row.homework_file_url
+          ? `<a href="${row.homework_file_url}" target="_blank" rel="noopener noreferrer">${row.homework_file_name ?? 'Файл'}</a>`
+          : '—';
+
+        return `
+          <tr>
+            <td>
+              <div>${row.student_name ?? 'Няма данни'}</div>
+              <div class="admin-table-meta">${row.student_class ?? 'Няма клас'}</div>
+            </td>
+            <td class="admin-message-cell">${row.message ?? '—'}</td>
+            <td>${fileCell}</td>
+            <td>${row.created_at ? new Date(row.created_at).toLocaleString('bg-BG') : '-'}</td>
+          </tr>
+        `;
+      })
+      .join('');
+  } catch (error) {
+    console.warn('Admin messages table load failed:', error?.message ?? error);
+    body.innerHTML = '<tr><td colspan="5">Временно недостъпни съобщения.</td></tr>';
+  }
+}
+
 async function loadRecentStudentCodes(root) {
   const body = root.querySelector('#admin-student-codes-table tbody');
   if (!body) {
@@ -337,6 +380,7 @@ async function refreshDashboard(root) {
     loadStats(root),
     loadProgressTable(root),
     loadSubmissionsTable(root),
+    loadMessagesTable(root),
     loadRecentStudentCodes(root),
     loadRegisteredParentsTable(root)
   ]);

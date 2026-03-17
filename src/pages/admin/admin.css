@@ -22,3 +22,13 @@
 #admin-progress-table .progress {
   height: 0.65rem;
 }
+
+.admin-table-meta {
+  color: #6c757d;
+  font-size: 0.86rem;
+}
+
+.admin-message-cell {
+  min-width: 280px;
+  white-space: normal;
+}
