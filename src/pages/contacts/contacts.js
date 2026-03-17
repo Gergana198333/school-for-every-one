@@ -69,6 +69,12 @@ async function prefillStudentFromProfile(root) {
   }
 }
 
+function normalizeClassToken(value) {
+  const raw = String(value ?? '').trim().toLowerCase();
+  const number = raw.match(/\d+/)?.[0] ?? '';
+  return number || raw;
+}
+
 async function loadStudentReplies(root) {
   const repliesBody = root.querySelector('#student-replies-table tbody');
   const repliesMessage = root.querySelector('#student-replies-message');
@@ -86,12 +92,11 @@ async function loadStudentReplies(root) {
 
   const { data, error } = await supabase
     .from('contact_messages')
-    .select('id, message, reply_text, replied_at, created_at')
+    .select('id, message, reply_text, replied_at, created_at, student_class')
     .ilike('student_name', studentName)
-    .ilike('student_class', studentClass)
     .not('reply_text', 'is', null)
     .order('replied_at', { ascending: false })
-    .limit(20);
+    .limit(50);
 
   if (error) {
     console.warn('Student replies load failed:', error.message);
@@ -100,13 +105,19 @@ async function loadStudentReplies(root) {
     return;
   }
 
-  if (!Array.isArray(data) || data.length === 0) {
+  const targetClassToken = normalizeClassToken(studentClass);
+  const filteredRows = (Array.isArray(data) ? data : []).filter((row) => {
+    const rowClassToken = normalizeClassToken(row.student_class);
+    return rowClassToken === targetClassToken;
+  });
+
+  if (filteredRows.length === 0) {
     repliesBody.innerHTML = '<tr><td colspan="3" class="text-body-secondary">Все още няма отговори към вашите съобщения.</td></tr>';
     setMessage(repliesMessage, 'Няма налични отговори.', 'neutral');
     return;
   }
 
-  repliesBody.innerHTML = data
+  repliesBody.innerHTML = filteredRows
     .map(
       (row) => `
         <tr>
@@ -118,7 +129,7 @@ async function loadStudentReplies(root) {
     )
     .join('');
 
-  setMessage(repliesMessage, `Намерени отговори: ${data.length}.`, 'success');
+  setMessage(repliesMessage, `Намерени отговори: ${filteredRows.length}.`, 'success');
 }
 
 async function submitToSupabase(form) {
@@ -199,7 +210,15 @@ export function init(root) {
     }
 
     setMessage(message, 'Формата е изпратена успешно.', 'success');
+    const nameValue = String(studentNameInput?.value ?? '');
+    const classValue = String(studentClassInput?.value ?? '');
     form.reset();
+    if (studentNameInput) {
+      studentNameInput.value = nameValue;
+    }
+    if (studentClassInput) {
+      studentClassInput.value = classValue;
+    }
     await loadStudentReplies(root);
   });
 
