@@ -106,18 +106,10 @@ function setQuickLoginMessage(root, text, variant = 'neutral') {
   }
 }
 
-function resolveQuickLoginEntry(codeRaw) {
+function buildQuickLoginCodeCandidates(codeRaw) {
   const normalized = String(codeRaw ?? '').trim();
   if (!normalized) {
-    return null;
-  }
-
-  if (normalized.includes('@')) {
-    return {
-      email: normalized.toLowerCase(),
-      authPassword: null,
-      quickPassword: null
-    };
+    return [];
   }
 
   const upper = normalized.toUpperCase().replace(/\s+/g, '');
@@ -139,6 +131,25 @@ function resolveQuickLoginEntry(codeRaw) {
     candidates.add(`${grade}UR${studentNumber}`);
   }
 
+  return Array.from(candidates);
+}
+
+function resolveQuickLoginEntry(codeRaw) {
+  const normalized = String(codeRaw ?? '').trim();
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized.includes('@')) {
+    return {
+      email: normalized.toLowerCase(),
+      authPassword: null,
+      quickPassword: null
+    };
+  }
+
+  const candidates = buildQuickLoginCodeCandidates(normalized);
+
   for (const code of candidates) {
     const mappedEntry = QUICK_LOGIN_MAP[code];
     if (mappedEntry?.email) {
@@ -150,35 +161,39 @@ function resolveQuickLoginEntry(codeRaw) {
 }
 
 async function resolveQuickLoginFromDatabase(code, password) {
-  const normalizedCode = String(code ?? '').trim().toUpperCase();
   const normalizedPassword = String(password ?? '');
+  const codeCandidates = buildQuickLoginCodeCandidates(code);
 
-  if (!normalizedCode || !normalizedPassword) {
+  if (!codeCandidates.length || !normalizedPassword) {
     return null;
   }
 
-  const { data, error } = await supabase.rpc('resolve_quick_login', {
-    p_code: normalizedCode,
-    p_password: normalizedPassword
-  });
+  for (const candidateCode of codeCandidates) {
+    const { data, error } = await supabase.rpc('resolve_quick_login', {
+      p_code: candidateCode,
+      p_password: normalizedPassword
+    });
 
-  if (error) {
-    console.warn('Quick login RPC error:', error.message);
-    return null;
+    if (error) {
+      console.warn('Quick login RPC error:', error.message);
+      continue;
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    const email = String(row?.login_email ?? '').trim().toLowerCase();
+
+    if (!email) {
+      continue;
+    }
+
+    return {
+      email,
+      authPassword: normalizedPassword,
+      quickPassword: null
+    };
   }
 
-  const row = Array.isArray(data) ? data[0] : data;
-  const email = String(row?.login_email ?? '').trim().toLowerCase();
-
-  if (!email) {
-    return null;
-  }
-
-  return {
-    email,
-    authPassword: normalizedPassword,
-    quickPassword: null
-  };
+  return null;
 }
 
 function getUserRedirectByEmail(email) {
