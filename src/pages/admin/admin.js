@@ -12,6 +12,8 @@ const ALLOWED_LESSON_MATERIAL_EXTENSIONS = new Set(['pdf', 'docx', 'mp4', 'pptx'
 const ALLOWED_NEWS_IMAGE_TYPES = new Set(['image/png']);
 const ALLOWED_NEWS_IMAGE_EXTENSIONS = new Set(['png']);
 const NEWS_IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024;
+const NEWS_IMAGE_UPLOAD_TIMEOUT_MS = 180000;
+const NEWS_INSERT_TIMEOUT_MS = 30000;
 
 const ADMIN_EMAILS = String(import.meta.env.VITE_ADMIN_EMAILS ?? '')
   .split(',')
@@ -594,13 +596,22 @@ async function handleLessonCreate(root, form) {
 async function handleNewsCreate(root, form) {
   const message = root.querySelector('#admin-news-message');
   const submitButton = form.querySelector('#publishNewsBtn');
-  const withTimeout = async (promise, timeoutMs, timeoutText) =>
-    Promise.race([
-      promise,
-      new Promise((_, reject) => {
-        window.setTimeout(() => reject(new Error(timeoutText)), timeoutMs);
-      })
-    ]);
+  const withTimeout = async (promise, timeoutMs, timeoutText) => {
+    let timeoutId;
+
+    try {
+      return await Promise.race([
+        promise,
+        new Promise((_, reject) => {
+          timeoutId = window.setTimeout(() => reject(new Error(timeoutText)), timeoutMs);
+        })
+      ]);
+    } finally {
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+    }
+  };
 
   if (submitButton) {
     submitButton.disabled = true;
@@ -642,13 +653,34 @@ async function handleNewsCreate(root, form) {
       }
 
       uploadedImagePath = `news/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.png`;
-      const { error: uploadError } = await withTimeout(
-        supabase.storage
-          .from(NEWS_IMAGES_BUCKET)
-          .upload(uploadedImagePath, newsImageFile, { upsert: false, contentType: 'image/png' }),
-        15000,
-        'Изтече времето за качване на снимката. Проверете връзката и опитайте отново.'
-      );
+      let uploadResult;
+      let uploadError;
+
+      try {
+        uploadResult = await withTimeout(
+          supabase.storage
+            .from(NEWS_IMAGES_BUCKET)
+            .upload(uploadedImagePath, newsImageFile, { upsert: false, contentType: 'image/png' }),
+          NEWS_IMAGE_UPLOAD_TIMEOUT_MS,
+          'Изтече времето за качване на снимката. Възможно е Supabase проектът да се събужда или връзката да е бавна.'
+        );
+        uploadError = uploadResult?.error ?? null;
+      } catch (firstUploadError) {
+        setMessage(message, 'Качване на снимката: повторен опит...', 'neutral');
+
+        await new Promise((resolve) => {
+          window.setTimeout(resolve, 1500);
+        });
+
+        uploadResult = await withTimeout(
+          supabase.storage
+            .from(NEWS_IMAGES_BUCKET)
+            .upload(uploadedImagePath, newsImageFile, { upsert: false, contentType: 'image/png' }),
+          NEWS_IMAGE_UPLOAD_TIMEOUT_MS,
+          'Изтече времето за качване на снимката и при повторен опит. Проверете връзката и Supabase Storage.'
+        );
+        uploadError = uploadResult?.error ?? firstUploadError ?? null;
+      }
 
       if (uploadError) {
         setMessage(
@@ -665,8 +697,8 @@ async function handleNewsCreate(root, form) {
 
     const { error } = await withTimeout(
       supabase.from('news_posts').insert([payload]),
-      15000,
-      'Изтече времето за публикуване на новината. Проверете връзката и опитайте отново.'
+      NEWS_INSERT_TIMEOUT_MS,
+      'Изтече времето за публикуване на новината. Възможно е Supabase да отговаря бавно. Опитайте отново.'
     );
 
     if (error) {
