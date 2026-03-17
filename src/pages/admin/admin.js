@@ -740,9 +740,10 @@ export async function init(root) {
   const studentForm = root.querySelector('#admin-student-form');
   const logoutButton = root.querySelector('#admin-logout-btn');
   const messagesTable = root.querySelector('#admin-messages-table');
-  const currentAdminEmail = sessionData?.session?.user?.email ?? '';
+  let currentAdminEmail = '';
 
   const { data: sessionData } = await supabase.auth.getSession();
+  currentAdminEmail = sessionData?.session?.user?.email ?? '';
   const isAllowedSession = await enforceAdminAccess(root, sessionData?.session ?? null, loginMessage);
 
   if (isAllowedSession) {
@@ -770,6 +771,8 @@ export async function init(root) {
     if (!isAllowed) {
       return;
     }
+
+    currentAdminEmail = data?.session?.user?.email ?? email;
 
     setMessage(loginMessage, 'Успешен вход.', 'success');
     await loadSelectOptions(root);
@@ -819,6 +822,7 @@ export async function init(root) {
   });
 
   supabase.auth.onAuthStateChange(async (_event, session) => {
+    currentAdminEmail = session?.user?.email ?? '';
     const isAllowed = await enforceAdminAccess(root, session, loginMessage);
 
     if (isAllowed) {

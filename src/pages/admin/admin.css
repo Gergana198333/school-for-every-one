@@ -21,8 +21,41 @@
   border-radius: 0.75rem;
 }
 
+#admin-dashboard-view article {
+  border: 1px solid rgba(15, 28, 63, 0.06);
+}
+
+#admin-dashboard-view .form-control,
+#admin-dashboard-view .form-select,
+#admin-dashboard-view textarea.form-control {
+  border-radius: 0.65rem;
+  border-color: #d6deeb;
+}
+
+#admin-dashboard-view .form-control:focus,
+#admin-dashboard-view .form-select:focus,
+#admin-dashboard-view textarea.form-control:focus {
+  border-color: #7aa8ff;
+  box-shadow: 0 0 0 0.2rem rgba(17, 64, 214, 0.12);
+}
+
 #admin-progress-table .progress {
   height: 0.65rem;
+}
+
+#admin-dashboard-view .table thead th {
+  position: sticky;
+  top: 0;
+  background: #f8f9ff;
+  z-index: 1;
+}
+
+#admin-dashboard-view .table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+#admin-dashboard-view .table tbody tr:hover {
+  background-color: rgba(17, 64, 214, 0.04);
 }
 
 .admin-table-meta {
