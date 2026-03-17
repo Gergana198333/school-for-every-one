@@ -112,6 +112,30 @@ function normalizeClassToken(value) {
   return number || raw;
 }
 
+function isReplyNameMatch(rowName, targetName) {
+  const normalizedRowName = normalizeNameToken(rowName);
+  const normalizedTargetName = normalizeNameToken(targetName);
+
+  if (!normalizedRowName || !normalizedTargetName) {
+    return false;
+  }
+
+  if (normalizedRowName === normalizedTargetName) {
+    return true;
+  }
+
+  if (normalizedRowName.includes(normalizedTargetName) || normalizedTargetName.includes(normalizedRowName)) {
+    return true;
+  }
+
+  const targetFirstName = normalizedTargetName.split(' ')[0];
+  if (targetFirstName && normalizedRowName.includes(targetFirstName)) {
+    return true;
+  }
+
+  return false;
+}
+
 async function buildReplyTargets(root) {
   const targets = [];
   const addTarget = (name, studentClass) => {
@@ -179,21 +203,20 @@ async function loadStudentReplies(root) {
   const replyTargets = await buildReplyTargets(root);
 
   if (replyTargets.length === 0) {
-    repliesBody.innerHTML = '<tr><td colspan="3" class="text-body-secondary">Попълнете име и клас, за да видите отговорите.</td></tr>';
+    repliesBody.innerHTML = '<tr><td colspan="4" class="text-body-secondary">Попълнете име и клас, за да видите отговорите.</td></tr>';
     return;
   }
 
   const { data, error } = await supabase
     .from('contact_messages')
-    .select('id, message, reply_text, replied_at, created_at, student_class')
-    .ilike('student_name', studentName)
+    .select('id, student_name, student_class, message, reply_text, replied_at, created_at')
     .not('reply_text', 'is', null)
     .order('replied_at', { ascending: false })
-    .limit(50);
+    .limit(200);
 
   if (error) {
     console.warn('Student replies load failed:', error.message);
-    repliesBody.innerHTML = '<tr><td colspan="3">Временно недостъпни отговори.</td></tr>';
+    repliesBody.innerHTML = '<tr><td colspan="4">Временно недостъпни отговори.</td></tr>';
     setMessage(repliesMessage, `Грешка при зареждане: ${error.message}`, 'error');
     return;
   }
@@ -201,11 +224,15 @@ async function loadStudentReplies(root) {
   const filteredRows = (Array.isArray(data) ? data : []).filter((row) => {
     const rowNameToken = normalizeNameToken(row.student_name);
     const rowClassToken = normalizeClassToken(row.student_class);
-    return replyTargets.some((target) => target.name === rowNameToken && target.studentClass === rowClassToken);
+    return replyTargets.some((target) => {
+      const classMatches = target.studentClass === rowClassToken;
+      const nameMatches = isReplyNameMatch(rowNameToken, target.name);
+      return classMatches && nameMatches;
+    });
   });
 
   if (filteredRows.length === 0) {
-    repliesBody.innerHTML = '<tr><td colspan="3" class="text-body-secondary">Все още няма отговори към вашите съобщения.</td></tr>';
+    repliesBody.innerHTML = '<tr><td colspan="4" class="text-body-secondary">Все още няма отговори към вашите съобщения.</td></tr>';
     setMessage(repliesMessage, 'Няма налични отговори.', 'neutral');
     return;
   }
@@ -217,12 +244,39 @@ async function loadStudentReplies(root) {
           <td>${row.message ?? '—'}</td>
           <td>${row.reply_text ?? '—'}</td>
           <td>${row.replied_at ? new Date(row.replied_at).toLocaleString('bg-BG') : (row.created_at ? new Date(row.created_at).toLocaleString('bg-BG') : '-')}</td>
+          <td>
+            <button type="button" class="btn btn-sm btn-outline-danger js-delete-reply" data-message-id="${row.id}">Изтрий</button>
+          </td>
         </tr>
       `
     )
     .join('');
 
   setMessage(repliesMessage, `Намерени отговори: ${filteredRows.length}.`, 'success');
+}
+
+async function deleteReplyMessage(root, messageId) {
+  const repliesMessage = root.querySelector('#student-replies-message');
+  const normalizedId = Number(messageId);
+
+  if (!Number.isFinite(normalizedId) || normalizedId <= 0) {
+    setMessage(repliesMessage, 'Невалиден запис за изтриване.', 'error');
+    return;
+  }
+
+  const { error } = await supabase
+    .from('contact_messages')
+    .delete()
+    .eq('id', normalizedId);
+
+  if (error) {
+    console.warn('Delete contact message failed:', error.message);
+    setMessage(repliesMessage, `Грешка при изтриване: ${error.message}`, 'error');
+    return;
+  }
+
+  setMessage(repliesMessage, 'Съобщението е изтрито.', 'success');
+  await loadStudentReplies(root);
 }
 
 async function submitToSupabase(form) {
@@ -272,6 +326,7 @@ export function init(root) {
   const message = root.querySelector('#form-message');
   const submitButton = form?.querySelector('button[type="submit"]');
   const loadRepliesButton = root.querySelector('#load-student-replies-btn');
+  const repliesTable = root.querySelector('#student-replies-table');
   const studentNameInput = root.querySelector('#studentName');
   const studentClassInput = root.querySelector('#studentClass');
 
@@ -317,6 +372,22 @@ export function init(root) {
 
   loadRepliesButton?.addEventListener('click', async () => {
     await loadStudentReplies(root);
+  });
+
+  repliesTable?.addEventListener('click', async (event) => {
+    const deleteButton = event.target.closest('.js-delete-reply');
+    if (!deleteButton) {
+      return;
+    }
+
+    const { messageId } = deleteButton.dataset;
+    if (!window.confirm('Сигурни ли сте, че искате да изтриете това съобщение?')) {
+      return;
+    }
+
+    deleteButton.setAttribute('disabled', 'disabled');
+    await deleteReplyMessage(root, messageId);
+    deleteButton.removeAttribute('disabled');
   });
 
   studentNameInput?.addEventListener('blur', async () => {
